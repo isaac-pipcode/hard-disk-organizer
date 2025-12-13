@@ -74,3 +74,19 @@ export const addDriveAndFiles = async (driveName: string, files: FileList): Prom
     }
   });
 };
+
+export const deleteFile = async (fileId: number): Promise<void> => {
+  await (db as any).transaction('rw', db.files, db.drives, async () => {
+    const file = await db.files.get(fileId);
+    if (file) {
+      await db.files.delete(fileId);
+      const drive = await db.drives.get(file.driveId);
+      if (drive) {
+        await db.drives.update(file.driveId, {
+          totalFiles: Math.max(0, drive.totalFiles - 1),
+          totalSize: Math.max(0, drive.totalSize - file.size)
+        });
+      }
+    }
+  });
+};

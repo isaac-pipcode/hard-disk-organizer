@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, File, FileImage, FileVideo, FileAudio, FileCode, FileText, HardDrive, Sparkles, Filter } from 'lucide-react';
+import { Search, File, FileImage, FileVideo, FileAudio, FileCode, FileText, HardDrive, Sparkles, Filter, Trash2 } from 'lucide-react';
 import { FileItem, Drive } from '../types';
 import { analyzeSearchQuery } from '../services/geminiService';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../services/db';
+import { db, deleteFile } from '../services/db';
 
 interface FileExplorerProps {
   drives: Drive[];
@@ -19,25 +19,13 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ drives }) => {
   const PAGE_SIZE = 50;
 
   // Real-time db access
-  // Note: For very large datasets, we might want to use count() and offset() carefully.
-  // Here we filter in memory if list is small, or use db queries if large. 
-  // Given browser limits, let's try a hybrid approach: Query DB based on simple filters.
-  
   const files = useLiveQuery(async () => {
     let collection = db.files.orderBy('id').reverse();
 
     if (selectedDriveId !== 'all') {
       collection = db.files.where('driveId').equals(selectedDriveId);
-    } else if (activeTypeFilter !== 'all') {
-      // Dexie compound index usage is tricky with ORs, usually requires filtering in JS or specific schema
-      // For simplicity, we fetch limit and filter in JS if not searching by name
-      // Or use .filter() on collection
     }
 
-    // If search query is present, we must filter manually or use a full text search plugin.
-    // Dexie .filter() iterates all items, which is slow for huge DBs.
-    // But for < 100k items it's often acceptable in modern browsers.
-    
     let result = await collection.toArray(); // Get all for client side filtering to be responsive
 
     // Apply Text Search
@@ -81,10 +69,24 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ drives }) => {
     if (params) {
       if (params.query) setSearchQuery(params.query);
       if (params.type) setActiveTypeFilter(params.type);
-      // Basic alert for size filters since we implemented basic filtering only
       if (params.minSizeMB || params.minSizeGB) {
         alert(`Gemini sugeriu filtrar por tamanho (${params.minSizeGB ? params.minSizeGB + 'GB' : params.minSizeMB + 'MB'}). Filtros de tamanho avançados podem ser adicionados em versões futuras.`);
       }
+    }
+  };
+
+  const handleDelete = async (id: number, name: string) => {
+    const confirmed = window.confirm(
+        `Tem certeza que deseja remover "${name}" do catálogo?\n\nEsta ação não apaga o arquivo do seu disco, apenas remove o registro deste catálogo.`
+    );
+    
+    if (confirmed) {
+        try {
+            await deleteFile(id);
+        } catch (error) {
+            console.error("Erro ao excluir arquivo:", error);
+            alert("Não foi possível excluir o arquivo do catálogo.");
+        }
     }
   };
 
@@ -185,12 +187,13 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ drives }) => {
       {/* File List */}
       <div className="flex-1 overflow-y-auto p-2">
         <table className="w-full text-left border-collapse">
-            <thead className="text-xs text-slate-400 uppercase bg-slate-900/50 sticky top-0 backdrop-blur-sm">
+            <thead className="text-xs text-slate-400 uppercase bg-slate-900/50 sticky top-0 backdrop-blur-sm z-10">
                 <tr>
                     <th className="px-4 py-3 rounded-tl-lg">Nome</th>
                     <th className="px-4 py-3">Disco</th>
                     <th className="px-4 py-3 text-right">Tamanho</th>
-                    <th className="px-4 py-3 rounded-tr-lg text-center">Tipo</th>
+                    <th className="px-4 py-3 text-center">Tipo</th>
+                    <th className="px-4 py-3 rounded-tr-lg w-[50px]"></th>
                 </tr>
             </thead>
             <tbody className="text-sm divide-y divide-slate-700/50">
@@ -223,11 +226,20 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ drives }) => {
                                 {file.extension}
                             </span>
                         </td>
+                        <td className="px-4 py-2 text-center">
+                            <button
+                                onClick={() => file.id && handleDelete(file.id, file.name)}
+                                className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors opacity-0 group-hover:opacity-100"
+                                title="Remover do catálogo"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        </td>
                     </tr>
                 ))}
                 {(!paginatedFiles || paginatedFiles.length === 0) && (
                     <tr>
-                        <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                        <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
                             Nenhum arquivo encontrado com os filtros atuais.
                         </td>
                     </tr>
