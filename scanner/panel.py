@@ -11,11 +11,10 @@ O dashboard analitico (para o gestor, remoto) e outro app, no Vercel, lendo o Su
 import os
 import sys
 import time
-import json
 import string
 import platform
 import threading
-import subprocess
+import contextlib
 from pathlib import Path
 
 from fastapi import FastAPI, Form
@@ -24,13 +23,28 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 import db
+import scan  # a varredura roda no MESMO processo (essencial para o .exe empacotado)
+
+
+def _recurso(rel):
+    """Resolve um recurso (ex.: pasta de templates) tanto no modo normal quanto
+    dentro do executavel empacotado pelo PyInstaller (que extrai em _MEIPASS)."""
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, rel)
+
+
+# Onde gravar manifestos/logs. No .exe, ao lado do proprio executavel (a pessoa
+# encontra a pasta 'manifestos' junto do programa); no modo normal, no diretorio atual.
+if getattr(sys, "frozen", False):
+    _BASE_DADOS = Path(sys.executable).parent
+else:
+    _BASE_DADOS = Path.cwd()
+MANIFEST_DIR = Path(os.environ.get("MANIFEST_DIR") or (_BASE_DADOS / "manifestos"))
 
 app = FastAPI(title="PRESERVA-SCAN — Operacao")
-templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+templates = Jinja2Templates(directory=_recurso("templates"))
 
-MANIFEST_DIR = Path(os.environ.get("MANIFEST_DIR", "./manifestos"))
-SENTINELA = "@@PS@@ "          # prefixo das linhas de progresso emitidas pelo scan.py
-STALL_SEGUNDOS = 60            # sem novidade por mais que isto (em fase com pulso) = suspeita de travamento
+STALL_SEGUNDOS = 90           # sem batimento por mais que isto (em fase com pulso) = suspeita de travamento
 TAIL_LINHAS = 400             # linhas de log mostradas no painel
 
 _lock = threading.Lock()       # garante uma varredura por vez
@@ -99,46 +113,42 @@ def _aplicar_evento(ev):
         JOB["erro_msg"] = ev.get("msg")
 
 
+def _sink(ev):
+    """Recebe cada evento do scanner (no mesmo processo) e atualiza o estado.
+    Tocar o relogio aqui e o que alimenta a deteccao de travamento."""
+    JOB["ultimo_evento_em"] = time.time()
+    _aplicar_evento(ev)
+
+
 def _rodar(disco, raiz, grupo):
     MANIFEST_DIR.mkdir(parents=True, exist_ok=True)
     log_path = MANIFEST_DIR / f"operacao_{disco}_{time.strftime('%Y%m%d_%H%M%S')}.log"
     JOB["log_path"] = str(log_path)
 
-    cmd = [sys.executable, "-u", "scan.py", "--disco", disco, "--raiz", raiz,
-           "--progress-json"] + (["--grupo", grupo] if grupo else [])
+    # A varredura roda NESTE processo (nao ha 'python scan.py' externo — o que
+    # tornaria o .exe fragil). Ligamos o scanner ao painel por callback e
+    # redirecionamos as mensagens humanas do scanner para o arquivo de log.
+    scan.MANIFESTOS = MANIFEST_DIR
+    scan.EMIT = False
+    scan.CALLBACK = _sink
     try:
         with open(log_path, "w", encoding="utf-8") as flog:
             flog.write(f"=== varredura {disco} ({raiz}) — {time.ctime()} ===\n")
             flog.flush()
-            proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, encoding="utf-8", errors="replace", bufsize=1,
-                cwd=str(Path(__file__).parent),
-            )
-            for linha in proc.stdout:
-                JOB["ultimo_evento_em"] = time.time()
-                if linha.startswith(SENTINELA):
-                    try:
-                        _aplicar_evento(json.loads(linha[len(SENTINELA):]))
-                    except Exception:
-                        pass
-                else:
-                    flog.write(linha)
-                    flog.flush()
-            rc = proc.wait()
-        JOB["returncode"] = rc
-        JOB["fim_em"] = time.time()
+            with contextlib.redirect_stdout(flog), contextlib.redirect_stderr(flog):
+                scan.varrer(disco, Path(raiz), grupo, force=False)
+        JOB["returncode"] = 0
         if JOB["estado"] != "erro":
-            if rc == 0:
-                JOB["estado"] = "concluido"
-            else:
-                JOB["estado"] = "erro"
-                JOB["erro_msg"] = JOB["erro_msg"] or f"O scanner terminou com codigo {rc}. Veja o log."
+            JOB["estado"] = "concluido"
     except Exception as e:
+        # varrer ja emitiu o evento 'erro' (que marcou o estado); aqui garantimos
+        # a mensagem mesmo que o erro tenha vindo de fora do bloco tratado.
         JOB["estado"] = "erro"
-        JOB["erro_msg"] = f"Falha ao iniciar o scanner: {type(e).__name__}: {e}"
-        JOB["fim_em"] = time.time()
+        JOB["returncode"] = 1
+        JOB["erro_msg"] = JOB["erro_msg"] or f"{type(e).__name__}: {e}"
     finally:
+        JOB["fim_em"] = time.time()
+        scan.CALLBACK = None
         _lock.release()
 
 

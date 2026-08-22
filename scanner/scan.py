@@ -32,31 +32,40 @@ CHUNK = 1024 * 1024          # 1 MiB por bloco de leitura (seguro para videos gr
 LOTE_DB = 200                # envia ao banco a cada N arquivos
 MANIFESTOS = Path(os.environ.get("MANIFEST_DIR", "./manifestos"))
 
-# --- Emissao de progresso estruturado (consumida pelo painel) ---------------
-# Desligada por padrao: o uso por linha de comando fica identico ao ja testado
-# em campo. O painel liga com --progress-json e le linhas "@@PS@@ {json}".
+# --- Emissao de progresso estruturado ---------------------------------------
+# Dois destinos possiveis, ambos desligados por padrao (uso por linha de comando
+# fica identico ao ja testado em campo):
+#   EMIT=True      -> escreve linhas "@@PS@@ {json}" em stdout (--progress-json)
+#   CALLBACK=func  -> chama func(evento) no mesmo processo (usado pelo painel .exe)
 EMIT = False
+CALLBACK = None
 SENTINELA = "@@PS@@ "
 _ULTIMO_EMIT = 0.0
 
 
 def _emit(obj, forcar=False, mingap=1.0):
-    """Escreve um evento de progresso em stdout (throttle por tempo).
+    """Emite um evento de progresso, com throttle por tempo.
 
-    So faz efeito com --progress-json. Cada evento vai numa linha propria,
-    prefixada por SENTINELA, para o painel distinguir de log humano."""
+    Eventos importantes (fase, total, done, erro, aviso) usam forcar=True e nunca
+    sao descartados; batimentos de progresso sao limitados a 1 por `mingap`."""
     global _ULTIMO_EMIT
-    if not EMIT:
+    if CALLBACK is None and not EMIT:
         return
     agora = time.monotonic()
     if not forcar and (agora - _ULTIMO_EMIT) < mingap:
         return
     _ULTIMO_EMIT = agora
-    try:
-        sys.stdout.write(SENTINELA + json.dumps(obj, ensure_ascii=False) + "\n")
-        sys.stdout.flush()
-    except Exception:
-        pass
+    if CALLBACK is not None:
+        try:
+            CALLBACK(obj)
+        except Exception:
+            pass
+    if EMIT:
+        try:
+            sys.stdout.write(SENTINELA + json.dumps(obj, ensure_ascii=False) + "\n")
+            sys.stdout.flush()
+        except Exception:
+            pass
 
 # MediaInfo so roda em audiovisual; ExifTool so em imagens. O resto recebe apenas
 # hash + identificacao de formato (evita centenas de milhares de chamadas de processo).
@@ -194,7 +203,7 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
     # denominador. Uma passada leve (stat, sem hash); emite batimentos para o
     # painel nao achar que travou. No modo CLI puro isso e pulado.
     total_arq, total_bytes = 0, 0
-    if EMIT:
+    if EMIT or CALLBACK is not None:
         _emit({"event": "phase", "fase": "contando"}, forcar=True)
         for dirpath, _, files in os.walk(raiz):
             for nome in files:

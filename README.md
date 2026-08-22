@@ -23,6 +23,26 @@ e a base do produto que poderá ser oferecido a outras instituições.
 - **Gestor/consultor (remoto):** acompanha resultados pelo **dashboard no Vercel**, que lê o Supabase. Não precisa de VPN nem de acesso à máquina.
 - **Importante:** o scanner **não roda no Vercel** (serverless não acessa discos locais). Só o dashboard roda lá.
 
+## Modo mais simples: o executável (PreservaScan.exe)
+
+Para quem vai **operar em campo sem mexer em terminal**. O `PreservaScan.exe`
+é um programa único, **não precisa de Python nem de Docker instalados**.
+
+**Para o operador (uso diário):**
+1. Dê **duplo-clique** em `PreservaScan.exe`. Abre uma janela preta (pode
+   minimizar) e, sozinho, o navegador no painel.
+2. No painel: **selecione o disco**, dê uma **etiqueta**, clique em iniciar.
+3. Acompanhe pela **barra de progresso** (tempo restante, velocidade). Se algo
+   travar ou falhar, o painel avisa em destaque.
+4. Para **encerrar**, feche a janela preta.
+
+Os relatórios (manifestos CSV/JSON e o log de cada varredura) aparecem numa
+pasta **`manifestos/`** criada **ao lado do `.exe`**.
+
+**De onde vem o `.exe`:** ele é gerado automaticamente numa máquina Windows pelo
+GitHub Actions (não é versionado no repositório). Veja
+[`packaging/README.md`](packaging/README.md) para baixá-lo ou gerar uma nova versão.
+
 ## Instalação na máquina da escola (na viagem)
 
 Pré-requisitos: Docker + Docker Compose. (No Windows, Docker Desktop com WSL2.)
