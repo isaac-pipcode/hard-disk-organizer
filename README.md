@@ -30,7 +30,10 @@ Para quem vai **operar em campo sem mexer em terminal**. O `PreservaScan.exe`
 
 **Para o operador (uso diário):**
 1. Dê **duplo-clique** em `PreservaScan.exe`. Abre uma janela preta (pode
-   minimizar) e, sozinho, o navegador no painel.
+   minimizar) e, sozinho, o navegador no painel. O endereço do painel também
+   fica escrito na janela preta **e** salvo no arquivo `ENDERECO_DO_PAINEL.txt`
+   ao lado do `.exe` — use-o se o navegador abrir a página errada (o programa
+   escolhe uma porta livre automaticamente, para não colidir com outros apps).
 2. No painel: **selecione o disco**, dê uma **etiqueta**, clique em iniciar.
 3. Acompanhe pela **barra de progresso** (tempo restante, velocidade). Se algo
    travar ou falhar, o painel avisa em destaque.

@@ -13,18 +13,48 @@ import time
 import socket
 import threading
 import webbrowser
+from pathlib import Path
 
 HOST = "127.0.0.1"
+# Portas preferidas: incomuns de proposito, para NAO colidir com outros apps que
+# a pessoa possa ter rodando (8080/3000/5000/8000 sao muito disputadas — inclusive
+# por outros paineis de IA locais). Tentamos nesta ordem; se todas ocupadas,
+# varremos a partir da primeira.
+PORTAS_PREFERIDAS = [8971, 8972, 8973, 8974, 8975]
 
 
-def _porta_livre(inicial=8080, tentativas=20):
-    """Acha uma porta livre a partir de `inicial` (evita 'porta em uso' se ja
-    houver algo no 8080)."""
-    for p in range(inicial, inicial + tentativas):
+def _porta_livre():
+    """Devolve a primeira porta preferida que esteja de fato livre nesta maquina."""
+    candidatas = list(PORTAS_PREFERIDAS) + list(range(8976, 8996))
+    for p in candidatas:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             if s.connect_ex((HOST, p)) != 0:      # nada escutando = livre
                 return p
-    return inicial
+    return PORTAS_PREFERIDAS[0]
+
+
+def _base_dir():
+    """Pasta onde deixar o arquivo com o endereco: ao lado do .exe (empacotado)
+    ou ao lado deste script (modo normal)."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent
+
+
+def _salvar_endereco(url):
+    """Grava o endereco do painel num .txt ao lado do programa, para o operador
+    reencontrar o painel sem depender da janela preta."""
+    try:
+        alvo = _base_dir() / "ENDERECO_DO_PAINEL.txt"
+        alvo.write_text(
+            "PRESERVA-SCAN — endereco do painel\n\n"
+            f"Abra este endereco no navegador:\n{url}\n\n"
+            "(o programa precisa estar aberto; feche a janela preta para encerrar)\n",
+            encoding="utf-8",
+        )
+        return alvo
+    except Exception:
+        return None
 
 
 def _abrir_navegador(url):
@@ -47,13 +77,20 @@ def main():
 
     porta = int(os.environ.get("PORT") or _porta_livre())
     url = f"http://{HOST}:{porta}"
+    arq = _salvar_endereco(url)
 
-    print("=" * 58)
+    print("=" * 60)
     print("  PRESERVA-SCAN — painel de varredura (somente leitura)")
-    print(f"  Abra no navegador:  {url}")
+    print("")
+    print(f"  >>> ABRA ESTE ENDERECO NO NAVEGADOR:  {url}")
+    print("")
+    print("  (o navegador deve abrir sozinho; se abrir a pagina errada,")
+    print("   use EXATAMENTE o endereco acima)")
+    if arq:
+        print(f"  O endereco tambem foi salvo em: {arq.name} (ao lado do programa)")
     print("  Esta janela pode ficar minimizada.")
     print("  Para ENCERRAR o painel, feche esta janela.")
-    print("=" * 58, flush=True)
+    print("=" * 60, flush=True)
 
     threading.Thread(target=_abrir_navegador, args=(url,), daemon=True).start()
     uvicorn.run(panel.app, host=HOST, port=porta, log_level="warning")
