@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PRESERVA-SCAN — Progresso da varredura</title>
+  <style>
+    :root { --azul:#2b4a6f; --tinta:#1a1a1a; }
+    body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; color: var(--tinta); }
+    h1 { font-size: 1.35rem; margin-bottom:.2rem; }
+    .sub { color:#666; font-size:.9rem; margin-top:0; }
+    .cartao { border:1px solid #e5e2da; border-radius:12px; padding:1.2rem 1.3rem; margin:1rem 0; background:#faf9f6; }
+    /* Banner de estado (muda de cor conforme a situação) */
+    .banner { padding:.9rem 1.1rem; border-radius:10px; font-weight:600; display:flex; gap:.6rem; align-items:center; }
+    .b-rodando { background:#eaf1fb; border:1px solid #b9d0f0; color:#20456f; }
+    .b-travado { background:#fff4e0; border:1px solid #f2d59a; color:#8a5a00; }
+    .b-erro    { background:#fdecec; border:1px solid #f2bcbc; color:#8a1f1f; }
+    .b-ok      { background:#e9f6ec; border:1px solid #bfe4c7; color:#1e5b32; }
+    .ponto { width:.7rem; height:.7rem; border-radius:50%; background:currentColor; flex:none; }
+    .pulsando { animation: pisca 1.1s ease-in-out infinite; }
+    @keyframes pisca { 0%,100%{opacity:1} 50%{opacity:.25} }
+    /* Barra de progresso */
+    .barra-fora { background:#e7e3da; border-radius:999px; height:22px; overflow:hidden; margin:.4rem 0; position:relative; }
+    .barra-dentro { background:linear-gradient(90deg,#3a6ea5,#2b4a6f); height:100%; width:0%; transition: width .4s ease; }
+    .barra-indef .barra-dentro { width:35% !important; animation: desliza 1.3s linear infinite; }
+    @keyframes desliza { 0%{margin-left:-35%} 100%{margin-left:100%} }
+    .pct { text-align:center; font-size:1.6rem; font-weight:700; color:var(--azul); margin:.3rem 0; }
+    .grade { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:.6rem; margin-top:1rem; }
+    .metrica { background:#fff; border:1px solid #eee; border-radius:8px; padding:.6rem .7rem; }
+    .metrica .n { font-size:1.15rem; font-weight:700; }
+    .metrica .r { font-size:.72rem; color:#777; text-transform:uppercase; letter-spacing:.03em; }
+    .arquivo { font-size:.8rem; color:#666; margin-top:.8rem; word-break:break-all; min-height:1.1em; }
+    .avisos { margin-top:1rem; font-size:.82rem; }
+    .avisos summary { cursor:pointer; color:#8a5a00; font-weight:600; }
+    .avisos li { color:#8a5a00; }
+    details.log summary { cursor:pointer; font-weight:600; color:var(--azul); }
+    pre.log { background:#1e1e1e; color:#d6d6d6; padding:.8rem; border-radius:8px; font-size:.75rem;
+              max-height:280px; overflow:auto; white-space:pre-wrap; word-break:break-word; }
+    a.botao { display:inline-block; margin-top:1rem; padding:.55rem 1.1rem; background:var(--azul);
+              color:#fff; border-radius:6px; text-decoration:none; }
+    .off { font-size:.8rem; color:#a15; }
+  </style>
+</head>
+<body>
+  <h1>PRESERVA-SCAN · Progresso da varredura</h1>
+  <p class="sub" id="alvo">—</p>
+
+  <div id="banner" class="banner b-rodando">
+    <span class="ponto pulsando"></span><span id="banner-txt">Conectando ao painel…</span>
+  </div>
+
+  <div class="cartao">
+    <div class="pct" id="pct">—</div>
+    <div class="barra-fora" id="barra"><div class="barra-dentro" id="barra-in"></div></div>
+    <div class="grade">
+      <div class="metrica"><div class="n" id="m-lidos">0</div><div class="r">Arquivos lidos</div></div>
+      <div class="metrica"><div class="n" id="m-total">—</div><div class="r">Total estimado</div></div>
+      <div class="metrica"><div class="n" id="m-novos">0</div><div class="r">Novos / alterados</div></div>
+      <div class="metrica"><div class="n" id="m-tempo">0s</div><div class="r">Tempo decorrido</div></div>
+      <div class="metrica"><div class="n" id="m-eta">—</div><div class="r">Tempo restante (est.)</div></div>
+      <div class="metrica"><div class="n" id="m-vel">—</div><div class="r">Velocidade</div></div>
+    </div>
+    <div class="arquivo" id="arquivo"></div>
+    <div class="avisos" id="avisos-box" style="display:none">
+      <details>
+        <summary id="avisos-sum">Arquivos com falha de leitura</summary>
+        <ul id="avisos-lista"></ul>
+      </details>
+    </div>
+  </div>
+
+  <p class="off" id="offaviso" style="display:none">
+    Modo offline (sem DATABASE_URL): os dados estão sendo salvos só no manifesto local.
+  </p>
+
+  <details class="log"><summary>Ver log técnico ao vivo</summary>
+    <pre class="log" id="log">(carregando…)</pre>
+  </details>
+
+  <p><a class="botao" href="/">← Voltar ao painel</a></p>
+
+<script>
+const FASES = {
+  ocioso:        "Aguardando início…",
+  contando:      "Contando arquivos do disco (preparando a barra)…",
+  identificando: "Identificando formatos (Siegfried) — pode levar alguns minutos, sem barra…",
+  varrendo:      "Varrendo: calculando checksum e lendo metadados…",
+  concluido:     "Varredura concluída com sucesso.",
+  erro:          "A varredura foi interrompida por um erro.",
+};
+
+function humano(bytes){
+  if(!bytes) return "0 B";
+  const u=["B","KB","MB","GB","TB","PB"]; let i=0, n=bytes;
+  while(n>=1024 && i<u.length-1){ n/=1024; i++; }
+  return n.toFixed(1)+" "+u[i];
+}
+function tempo(seg){
+  seg=Math.max(0,Math.round(seg));
+  const h=Math.floor(seg/3600), m=Math.floor((seg%3600)/60), s=seg%60;
+  if(h) return h+"h"+String(m).padStart(2,"0")+"m";
+  if(m) return m+"m"+String(s).padStart(2,"0")+"s";
+  return s+"s";
+}
+function num(n){ return (n||0).toLocaleString("pt-BR"); }
+
+let paradoRender = false;
+
+async function tick(){
+  let s;
+  try{
+    const r = await fetch("/status", {cache:"no-store"});
+    s = await r.json();
+  }catch(e){
+    document.getElementById("banner-txt").textContent = "Sem resposta do painel — verifique se a janela do programa ainda está aberta.";
+    return;
+  }
+
+  document.getElementById("alvo").textContent =
+    (s.disco ? "Disco: " + s.disco : "") + (s.raiz ? "  ·  " + s.raiz : "");
+
+  // ---- Banner de estado (a sinalização que o operador precisa ver) ----
+  const banner = document.getElementById("banner");
+  const btxt = document.getElementById("banner-txt");
+  const ponto = banner.querySelector(".ponto");
+  banner.className = "banner b-rodando";
+  ponto.classList.add("pulsando");
+
+  if(s.estado === "erro"){
+    banner.className = "banner b-erro"; ponto.classList.remove("pulsando");
+    btxt.textContent = "⚠️ Erro: " + (s.erro_msg || "a varredura falhou. Veja o log técnico abaixo.");
+  } else if(s.estado === "concluido"){
+    banner.className = "banner b-ok"; ponto.classList.remove("pulsando");
+    let t = "✅ Concluído — " + num(s.lidos) + " arquivos lidos, " + num(s.novos) + " novos/alterados";
+    if(s.erros) t += ", " + num(s.erros) + " com falha de leitura";
+    btxt.textContent = t + ".";
+  } else if(s.travado){
+    banner.className = "banner b-travado";
+    btxt.textContent = "⚠️ Sem resposta há " + tempo(s.parado_ha) +
+      ". Pode ser um travamento — confira se o disco continua conectado e se o cabo/USB não caiu.";
+  } else {
+    btxt.textContent = FASES[s.estado] || "Trabalhando…";
+  }
+
+  // ---- Barra e porcentagem ----
+  const barra = document.getElementById("barra");
+  const barraIn = document.getElementById("barra-in");
+  const pct = document.getElementById("pct");
+  let indef = (s.estado === "contando" || s.estado === "identificando" || !s.total);
+
+  if(s.estado === "concluido"){
+    indef=false; barraIn.style.width="100%"; pct.textContent="100%";
+  } else if(indef){
+    barra.classList.add("barra-indef"); pct.textContent = s.estado==="contando" ? "…" : "";
+  } else {
+    barra.classList.remove("barra-indef");
+    let p = s.total ? Math.min(100, (s.lidos/s.total)*100) : 0;
+    barraIn.style.width = p.toFixed(1)+"%";
+    pct.textContent = p.toFixed(1)+"%";
+  }
+  if(indef && s.estado!=="concluido") barra.classList.add("barra-indef");
+
+  // ---- Métricas ----
+  document.getElementById("m-lidos").textContent = num(s.lidos);
+  document.getElementById("m-total").textContent = s.total ? num(s.total) : "—";
+  document.getElementById("m-novos").textContent = num(s.novos);
+  document.getElementById("m-tempo").textContent = tempo(s.decorrido);
+
+  // Velocidade e ETA — preferimos bytes (custo real é o hash); caímos para arquivos.
+  let vel = "—", eta = "—";
+  if(s.varrendo_ha > 2 && s.bytes_lidos > 0){
+    const bps = s.bytes_lidos / s.varrendo_ha;
+    vel = humano(bps) + "/s";
+    if(s.total_bytes > s.bytes_lidos && bps > 0)
+      eta = tempo((s.total_bytes - s.bytes_lidos) / bps);
+  } else if(s.varrendo_ha > 2 && s.lidos > 0 && s.total > 0){
+    const fps = s.lidos / s.varrendo_ha;
+    vel = Math.round(fps) + " arq/s";
+    if(s.total > s.lidos && fps > 0) eta = tempo((s.total - s.lidos) / fps);
+  }
+  if(s.estado === "concluido"){ eta = "—"; }
+  document.getElementById("m-vel").textContent = vel;
+  document.getElementById("m-eta").textContent = (s.estado==="varrendo") ? eta : "—";
+
+  document.getElementById("arquivo").textContent = s.arquivo ? ("Lendo: " + s.arquivo) : "";
+  document.getElementById("offaviso").style.display = s.online ? "none" : "block";
+
+  // ---- Avisos por arquivo ----
+  if(s.avisos && s.avisos.length){
+    document.getElementById("avisos-box").style.display = "block";
+    document.getElementById("avisos-sum").textContent =
+      num(s.erros) + " arquivo(s) com falha de leitura (a varredura continuou)";
+    const ul = document.getElementById("avisos-lista");
+    ul.innerHTML = "";
+    s.avisos.forEach(a=>{
+      const li=document.createElement("li");
+      li.textContent = a.arquivo + " — " + a.erro;
+      ul.appendChild(li);
+    });
+  }
+
+  // Atualiza o log só quando a aba de log está aberta (evita tráfego à toa).
+  const det = document.querySelector("details.log");
+  if(det.open){
+    try{
+      const lt = await (await fetch("/log", {cache:"no-store"})).text();
+      const pre = document.getElementById("log");
+      pre.textContent = lt;
+      pre.scrollTop = pre.scrollHeight;
+    }catch(e){}
+  }
+
+  // Para de repetir quando termina.
+  if(s.estado === "concluido" || s.estado === "erro"){
+    if(!paradoRender){ paradoRender = true; }
+    return; // não reagenda
+  }
+  setTimeout(tick, 1000);
+}
+tick();
+</script>
+</body>
+</html>

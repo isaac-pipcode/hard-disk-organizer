@@ -1,20 +1,96 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# PRESERVA-SCAN — módulo de varredura (esqueleto)
 
-# Run and deploy your AI Studio app
+Varre discos e nuvem do acervo, **somente leitura**, e produz o inventário
+(caminho, SHA-256, formato, metadados). É a fase E1 do projeto Porto Iracema
+e a base do produto que poderá ser oferecido a outras instituições.
 
-This contains everything you need to run your app locally.
+## Arquitetura (quem roda o quê)
 
-View your app in AI Studio: https://ai.studio/apps/drive/1jqs9BOQTDkyab2TcO_Hho3Kx8Xw0vaqB
+```
+  MÁQUINA DA ESCOLA (local)                       NUVEM
+  ┌──────────────────────────────┐
+  │  PRESERVA-SCAN (Docker)       │   só metadados   ┌──────────────┐      ┌──────────────┐
+  │  rclone · Siegfried ·         │ ───────────────▶ │  Supabase    │ ◀─── │  Dashboard    │
+  │  MediaInfo · ExifTool · hash  │   (inventário)   │ (PostgreSQL) │      │  (Vercel)     │
+  │  + painel de operação :8080   │                  └──────────────┘      └──────────────┘
+  └──────────────────────────────┘
+     ▲ lê os discos (99 TB                              ▲ os 99 TB          ▲ o GESTOR acompanha
+       NUNCA saem daqui)                                  nunca sobem         de qualquer lugar
+     operado pelo PROFISSIONAL INTERNO
+```
 
-## Run Locally
+- **Profissional interno (na escola):** liga os discos e opera o scanner pelo painel `http://localhost:8080`.
+- **Gestor/consultor (remoto):** acompanha resultados pelo **dashboard no Vercel**, que lê o Supabase. Não precisa de VPN nem de acesso à máquina.
+- **Importante:** o scanner **não roda no Vercel** (serverless não acessa discos locais). Só o dashboard roda lá.
 
-**Prerequisites:**  Node.js
+## Modo mais simples: o executável (PreservaScan.exe)
 
+Para quem vai **operar em campo sem mexer em terminal**. O `PreservaScan.exe`
+é um programa único, **não precisa de Python nem de Docker instalados**.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+**Para o operador (uso diário):**
+1. Dê **duplo-clique** em `PreservaScan.exe`. Abre uma janela preta (pode
+   minimizar) e, sozinho, o navegador no painel.
+2. No painel: **selecione o disco**, dê uma **etiqueta**, clique em iniciar.
+3. Acompanhe pela **barra de progresso** (tempo restante, velocidade). Se algo
+   travar ou falhar, o painel avisa em destaque.
+4. Para **encerrar**, feche a janela preta.
+
+Os relatórios (manifestos CSV/JSON e o log de cada varredura) aparecem numa
+pasta **`manifestos/`** criada **ao lado do `.exe`**.
+
+**De onde vem o `.exe`:** ele é gerado automaticamente numa máquina Windows pelo
+GitHub Actions (não é versionado no repositório). Veja
+[`packaging/README.md`](packaging/README.md) para baixá-lo ou gerar uma nova versão.
+
+## Instalação na máquina da escola (na viagem)
+
+Pré-requisitos: Docker + Docker Compose. (No Windows, Docker Desktop com WSL2.)
+
+```bash
+git clone <este-repo> preserva-scan && cd preserva-scan
+cp .env.example .env          # preencha DATABASE_URL com a string do Supabase
+# edite docker-compose.yml: aponte o volume :ro para o disco ligado
+docker compose up --build     # sobe o painel em http://localhost:8080
+```
+
+Sem Supabase (modo offline, dados só locais):
+```bash
+docker compose --profile local up --build   # sobe um Postgres local também
+```
+
+## Como usar
+
+1. Ligue um HD e monte-o (ex.: `/mnt/hd_antigos_c`); ajuste o volume `:ro` no compose.
+2. Abra `http://localhost:8080`, informe **etiqueta** e **ponto de montagem**, clique em iniciar.
+3. Acompanhe pelo log; ao fim, o disco aparece no resumo e no dashboard.
+4. Repita para cada HD (prioridade: grupo **antigos** primeiro).
+
+Ou por linha de comando, direto no container:
+```bash
+docker compose exec scanner python scan.py --disco "Antigos-C" --raiz /mnt/hd --grupo antigos
+```
+
+## Garantias de segurança
+
+- **Somente leitura:** os discos são montados com `:ro`; o scanner só lê. Nunca move, copia ou apaga o acervo.
+- **Idempotência:** re-rodar não duplica registros (chave `disco_label + caminho`); arquivo já lido, com mesmo tamanho e data, é pulado. Um mesmo arquivo com hash diferente do anterior = alerta de alteração/corrupção.
+- **Redundância do inventário:** tudo é gravado em manifesto local (CSV + JSON) **antes** de ir ao banco. O catálogo é, ele próprio, objeto de preservação.
+
+## O que este esqueleto entrega e o que falta
+
+Entregue: varredura (rclone/Siegfried/MediaInfo/ExifTool/SHA-256), idempotência,
+manifestos, envio ao Supabase, painel local de operação, empacotamento Docker,
+esquema SQL com a **visão de duplicidade** (responde "está em 1 ou em 2+ discos").
+
+Próximo passo (v1): **dashboard no Vercel** (Next.js lendo o Supabase) com volumetria,
+mapa de duplicatas, progresso por disco e download dos relatórios — a interface
+amigável para o gestor. A tabela `arquivos` e as visões `duplicidade`/`resumo_discos`
+já são o contrato de dados desse dashboard.
+
+## Aviso de licenças (para comercializar depois)
+
+As ferramentas chamadas como processo externo (rclone/MIT, Siegfried/Apache-2.0,
+MediaInfo/BSD, ExifTool/Artistic, FFmpeg como binário) permitem produto proprietário
+por cima. **Não** embutir Archivematica/AtoM (AGPL-3.0). Validar a estratégia de
+licenciamento e o arquivo de atribuição (NOTICE) com um advogado de PI antes de vender.
