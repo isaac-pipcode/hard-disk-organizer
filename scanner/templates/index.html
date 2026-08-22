@@ -15,6 +15,9 @@
     table { width:100%; border-collapse:collapse; margin-top:1rem; font-size:.9rem; }
     th,td { text-align:left; padding:.4rem .6rem; border-bottom:1px solid #eee; }
     .warn { color:#a15; font-size:.85rem; }
+    .aviso-rodando { background:#eaf1fb; border:1px solid #b9d0f0; color:#20456f;
+                     padding:.7rem 1rem; border-radius:8px; margin:1rem 0; }
+    .aviso-rodando a { color:#20456f; font-weight:600; }
   </style>
 </head>
 <body>
@@ -23,6 +26,23 @@
     {% if online %}Conectado ao banco (dados vão para o dashboard).{% else %}
     <span class="warn">Modo offline: sem DATABASE_URL. Os dados ficam só no manifesto local.</span>{% endif %}
   </p>
+
+  {% if rodando %}
+  <div class="aviso-rodando">
+    ⏳ Há uma varredura em andamento{% if job_disco %} — <b>{{ job_disco }}</b>{% endif %}.
+    <a href="/acompanhar">Acompanhar o progresso →</a>
+  </div>
+  {% elif job_estado == 'concluido' %}
+  <div class="aviso-rodando" style="background:#e9f6ec;border-color:#bfe4c7;color:#1e5b32;">
+    ✅ Última varredura{% if job_disco %} de <b>{{ job_disco }}</b>{% endif %} concluída.
+    <a href="/acompanhar" style="color:#1e5b32;">Ver resultado →</a>
+  </div>
+  {% elif job_estado == 'erro' %}
+  <div class="aviso-rodando" style="background:#fdecec;border-color:#f2bcbc;color:#8a1f1f;">
+    ⚠️ A última varredura{% if job_disco %} de <b>{{ job_disco }}</b>{% endif %} terminou com erro.
+    <a href="/acompanhar" style="color:#8a1f1f;">Ver o que aconteceu →</a>
+  </div>
+  {% endif %}
 
   <form action="/varrer" method="post">
     <label>Disco a varrer (selecione)</label>
@@ -35,10 +55,14 @@
     <input name="disco" required>
     <label>Grupo (antigos | uso_continuo | transporte)</label>
     <input name="grupo" placeholder="antigos">
+    {% if rodando %}
+    <button type="submit" disabled title="Aguarde a varredura atual terminar">▶ Varredura em andamento…</button>
+    {% else %}
     <button type="submit">▶ Iniciar varredura (somente leitura)</button>
+    {% endif %}
   </form>
 
-  <p><a href="/log">Ver log ao vivo</a></p>
+  <p><a href="/acompanhar">Acompanhar progresso</a> · <a href="/log">ver log ao vivo</a></p>
 
   <h2 style="font-size:1.1rem">Discos</h2>
   <table>

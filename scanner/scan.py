@@ -17,6 +17,7 @@ import os
 import sys
 import csv
 import json
+import time
 import uuid
 import shutil
 import hashlib
@@ -30,6 +31,32 @@ import db  # persistencia (Supabase/Postgres) + idempotencia
 CHUNK = 1024 * 1024          # 1 MiB por bloco de leitura (seguro para videos grandes)
 LOTE_DB = 200                # envia ao banco a cada N arquivos
 MANIFESTOS = Path(os.environ.get("MANIFEST_DIR", "./manifestos"))
+
+# --- Emissao de progresso estruturado (consumida pelo painel) ---------------
+# Desligada por padrao: o uso por linha de comando fica identico ao ja testado
+# em campo. O painel liga com --progress-json e le linhas "@@PS@@ {json}".
+EMIT = False
+SENTINELA = "@@PS@@ "
+_ULTIMO_EMIT = 0.0
+
+
+def _emit(obj, forcar=False, mingap=1.0):
+    """Escreve um evento de progresso em stdout (throttle por tempo).
+
+    So faz efeito com --progress-json. Cada evento vai numa linha propria,
+    prefixada por SENTINELA, para o painel distinguir de log humano."""
+    global _ULTIMO_EMIT
+    if not EMIT:
+        return
+    agora = time.monotonic()
+    if not forcar and (agora - _ULTIMO_EMIT) < mingap:
+        return
+    _ULTIMO_EMIT = agora
+    try:
+        sys.stdout.write(SENTINELA + json.dumps(obj, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+    except Exception:
+        pass
 
 # MediaInfo so roda em audiovisual; ExifTool so em imagens. O resto recebe apenas
 # hash + identificacao de formato (evita centenas de milhares de chamadas de processo).
@@ -45,11 +72,18 @@ def _norm(p):
     return str(p).replace("\\", "/")
 
 
-def sha256_de(caminho: Path) -> str:
+def sha256_de(caminho: Path, pulso=None) -> str:
+    """Calcula o SHA-256 lendo em blocos. `pulso(bytes_lidos)` e chamado a cada
+    bloco: serve de batimento cardiaco para o painel enxergar que um arquivo
+    grande (video de dezenas de GB) esta AVANCANDO, e nao travado."""
     h = hashlib.sha256()
+    lidos = 0
     with open(caminho, "rb") as f:
         for bloco in iter(lambda: f.read(CHUNK), b""):
             h.update(bloco)
+            lidos += len(bloco)
+            if pulso is not None:
+                pulso(lidos)
     return h.hexdigest()
 
 
@@ -156,73 +190,141 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
     db.abrir_run(run_id, disco_label)
     ja = {} if force else db.ja_varridos(disco_label)
 
+    # Fase 0 (so com painel): conta arquivos/bytes antes, para a barra ter um
+    # denominador. Uma passada leve (stat, sem hash); emite batimentos para o
+    # painel nao achar que travou. No modo CLI puro isso e pulado.
+    total_arq, total_bytes = 0, 0
+    if EMIT:
+        _emit({"event": "phase", "fase": "contando"}, forcar=True)
+        for dirpath, _, files in os.walk(raiz):
+            for nome in files:
+                p = Path(dirpath) / nome
+                try:
+                    if p.is_symlink() or not p.is_file():
+                        continue
+                    total_arq += 1
+                    total_bytes += p.stat().st_size
+                except OSError:
+                    continue
+                if total_arq % 2000 == 0:
+                    _emit({"event": "contagem", "total": total_arq,
+                           "total_bytes": total_bytes}, mingap=1.0)
+        _emit({"event": "total", "total": total_arq, "total_bytes": total_bytes},
+              forcar=True)
+
+    _emit({"event": "phase", "fase": "identificando"}, forcar=True)
     print("Identificando formatos (Siegfried, uma passada na arvore)...", flush=True)
     mapa_puid = siegfried_lote(raiz)
 
-    lote, novos, lidos = [], 0, 0
+    _emit({"event": "phase", "fase": "varrendo"}, forcar=True)
+    lote, novos, lidos, bytes_lidos, erros = [], 0, 0, 0, 0
     campos = ["disco_label", "caminho", "nome", "extensao", "tamanho_bytes",
               "mtime", "sha256", "puid", "formato"]
 
-    with open(manifesto_csv, "w", newline="", encoding="utf-8") as fcsv, \
-         open(manifesto_json, "w", encoding="utf-8") as fjson:
-        w = csv.DictWriter(fcsv, fieldnames=campos)
-        w.writeheader()
+    def _progresso(forcar=False, arquivo=None, parcial=0):
+        _emit({"event": "progress", "fase": "varrendo", "lidos": lidos,
+               "novos": novos, "erros": erros, "total": total_arq,
+               "bytes_lidos": bytes_lidos + parcial, "total_bytes": total_bytes,
+               "arquivo": arquivo}, forcar=forcar, mingap=1.5)
 
-        for dirpath, _, files in os.walk(raiz):
-            for nome in files:
-                caminho_abs = Path(dirpath) / nome
-                if caminho_abs.is_symlink() or not caminho_abs.is_file():
-                    continue
-                rel = str(caminho_abs.relative_to(raiz))
-                try:
-                    st = caminho_abs.stat()
-                except OSError:
-                    continue
-                lidos += 1
+    try:
+        with open(manifesto_csv, "w", newline="", encoding="utf-8") as fcsv, \
+             open(manifesto_json, "w", encoding="utf-8") as fjson:
+            w = csv.DictWriter(fcsv, fieldnames=campos)
+            w.writeheader()
 
-                # IDEMPOTENCIA: se ja lido com mesmo tamanho e mtime, pula (a menos de --force)
-                if rel in ja:
-                    tam_ant, mt_ant = ja[rel]
-                    if tam_ant == st.st_size and mt_ant == iso(st.st_mtime):
+            for dirpath, _, files in os.walk(raiz):
+                for nome in files:
+                    caminho_abs = Path(dirpath) / nome
+                    if caminho_abs.is_symlink() or not caminho_abs.is_file():
+                        continue
+                    rel = str(caminho_abs.relative_to(raiz))
+                    try:
+                        st = caminho_abs.stat()
+                    except OSError:
+                        continue
+                    lidos += 1
+
+                    # IDEMPOTENCIA: se ja lido com mesmo tamanho e mtime, pula (a menos de --force)
+                    if rel in ja:
+                        tam_ant, mt_ant = ja[rel]
+                        if tam_ant == st.st_size and mt_ant == iso(st.st_mtime):
+                            _progresso(arquivo=rel)  # mostra avanco mesmo pulando
+                            continue
+
+                    if lidos % 500 == 0:
+                        print(f"  {lidos} lidos / {novos} novos...", flush=True)
+
+                    # Um arquivo ilegivel (permissao, setor defeituoso) NAO pode
+                    # abortar a varredura inteira: registra o aviso e segue.
+                    try:
+                        sha = sha256_de(
+                            caminho_abs,
+                            pulso=lambda parcial: _progresso(arquivo=rel, parcial=parcial),
+                        )
+                        ext = caminho_abs.suffix.lower().lstrip(".")
+                        puid, formato = mapa_puid.get(_norm(rel), (None, None))
+                        # MediaInfo so em AV; ExifTool so em imagem; resto: so hash + formato
+                        if ext in EXT_VIDEO_AUDIO:
+                            meta = mediainfo(caminho_abs)
+                        elif ext in EXT_IMAGEM:
+                            meta = exiftool(caminho_abs)
+                        else:
+                            meta = None
+                    except Exception as e:
+                        erros += 1
+                        msg = f"{type(e).__name__}: {e}"
+                        print(f"  AVISO: falha ao ler '{rel}' ({msg}); pulando.", flush=True)
+                        _emit({"event": "aviso_arquivo", "arquivo": rel, "erro": msg},
+                              forcar=True)
                         continue
 
-                if lidos % 500 == 0:
-                    print(f"  {lidos} lidos / {novos} novos...", flush=True)
-                sha = sha256_de(caminho_abs)
-                ext = caminho_abs.suffix.lower().lstrip(".")
-                puid, formato = mapa_puid.get(_norm(rel), (None, None))
-                # MediaInfo so em AV; ExifTool so em imagem; resto: so hash + formato
-                if ext in EXT_VIDEO_AUDIO:
-                    meta = mediainfo(caminho_abs)
-                elif ext in EXT_IMAGEM:
-                    meta = exiftool(caminho_abs)
-                else:
-                    meta = None
+                    linha = {
+                        "disco_label": disco_label,
+                        "caminho": rel,
+                        "nome": nome,
+                        "extensao": ext,
+                        "tamanho_bytes": st.st_size,
+                        "mtime": iso(st.st_mtime),
+                        "sha256": sha,
+                        "puid": puid,
+                        "formato": formato,
+                        "mediainfo": meta,
+                        "scan_run_id": run_id,
+                    }
+                    w.writerow({k: linha[k] for k in campos})
+                    fjson.write(json.dumps(linha, ensure_ascii=False) + "\n")
+                    lote.append(linha)
+                    novos += 1
+                    bytes_lidos += st.st_size
+                    _progresso(arquivo=rel)
+                    if len(lote) >= LOTE_DB:
+                        db.enviar_lote(lote); lote = []
 
-                linha = {
-                    "disco_label": disco_label,
-                    "caminho": rel,
-                    "nome": nome,
-                    "extensao": ext,
-                    "tamanho_bytes": st.st_size,
-                    "mtime": iso(st.st_mtime),
-                    "sha256": sha,
-                    "puid": puid,
-                    "formato": formato,
-                    "mediainfo": meta,
-                    "scan_run_id": run_id,
-                }
-                w.writerow({k: linha[k] for k in campos})
-                fjson.write(json.dumps(linha, ensure_ascii=False) + "\n")
-                lote.append(linha)
-                novos += 1
-                if len(lote) >= LOTE_DB:
-                    db.enviar_lote(lote); lote = []
+        db.enviar_lote(lote)
+        db.fechar_run(run_id, novos, lidos)
+        db.concluir_disco(disco_label)
+    except Exception as e:
+        # Falha global (banco caiu, disco desconectado no meio, etc.): marca a run
+        # como falha no banco e avisa o painel de forma estruturada.
+        msg = f"{type(e).__name__}: {e}"
+        try:
+            db.fechar_run(run_id, novos, lidos, status="falhou")
+            db.concluir_disco(disco_label, status="falhou")
+        except Exception:
+            pass
+        _emit({"event": "erro", "msg": msg, "lidos": lidos, "novos": novos},
+              forcar=True)
+        print(f"\nERRO: a varredura de '{disco_label}' falhou — {msg}", flush=True)
+        raise
 
-    db.enviar_lote(lote)
-    db.fechar_run(run_id, novos, lidos)
-    db.concluir_disco(disco_label)
-    print(f"\nOK — disco '{disco_label}': {lidos} lidos, {novos} novos/alterados.")
+    _progresso(forcar=True)
+    _emit({"event": "done", "lidos": lidos, "novos": novos, "erros": erros,
+           "total": total_arq, "bytes_lidos": bytes_lidos,
+           "csv": str(manifesto_csv), "jsonl": str(manifesto_json),
+           "online": db.conectado()}, forcar=True)
+    print(f"\nOK — disco '{disco_label}': {lidos} lidos, {novos} novos/alterados"
+          + (f", {erros} com falha de leitura." if erros else "."))
     print(f"Manifestos: {manifesto_csv}  |  {manifesto_json}")
     if not db.conectado():
         print("(modo offline: dados so no manifesto local; defina DATABASE_URL para enviar ao dashboard)")
@@ -236,8 +338,13 @@ def main():
     p.add_argument("--force", action="store_true", help="Re-varre tudo, ignorando o ja lido")
     p.add_argument("--dry-run", action="store_true",
                    help="So conta arquivos/bytes e estima o tempo; nao calcula hash nem grava nada")
+    p.add_argument("--progress-json", action="store_true",
+                   help="Emite eventos de progresso (linhas '@@PS@@ {json}') para o painel")
     a = p.parse_args()
+    global EMIT
+    EMIT = a.progress_json
     if not a.raiz.exists():
+        _emit({"event": "erro", "msg": f"Raiz nao encontrada: {a.raiz}"}, forcar=True)
         sys.exit(f"Raiz nao encontrada: {a.raiz}")
     if a.dry_run:
         print(f"[DRY-RUN] Inspecionando '{a.disco}' em {a.raiz} (nada sera calculado ou gravado)\n")
