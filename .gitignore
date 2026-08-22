@@ -20,6 +20,9 @@ dist/
 *.exe
 *.spec.bak
 
+# Gerado em runtime pelo painel/executável
+ENDERECO_DO_PAINEL.txt
+
 # Logs
 logs
 *.log
