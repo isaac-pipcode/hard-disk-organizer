@@ -1,0 +1,34 @@
+# PRESERVA-SCAN — sobe o scanner na maquina da escola.
+#   - O painel de operacao fica em http://localhost:8080
+#   - Os discos sao montados como volumes SOMENTE LEITURA (:ro) — trava de seguranca.
+#   - Os dados vao para o Supabase (DATABASE_URL no .env) e para ./manifestos (local).
+
+services:
+  scanner:
+    build: .
+    ports:
+      - "8080:8080"
+    env_file: .env
+    volumes:
+      - ./manifestos:/app/manifestos          # manifestos locais (redundancia)
+      # >>> Monte cada HD aqui como SOMENTE LEITURA (:ro). Exemplos:
+      - /mnt/hd_antigos_c:/mnt/hd:ro           # troque o caminho conforme o disco ligado
+      # - /mnt/hd_px_p:/mnt/hd:ro
+    restart: unless-stopped
+
+  # OPCIONAL: banco local, caso nao use Supabase (modo sem nuvem).
+  # Para usar, rode:  docker compose --profile local up
+  db:
+    image: postgres:16
+    profiles: ["local"]
+    environment:
+      POSTGRES_PASSWORD: preserva
+      POSTGRES_DB: preserva
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
