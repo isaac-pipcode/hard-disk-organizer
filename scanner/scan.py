@@ -237,8 +237,13 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
                "arquivo": arquivo}, forcar=forcar, mingap=1.5)
 
     try:
-        with open(manifesto_csv, "w", newline="", encoding="utf-8") as fcsv, \
-             open(manifesto_json, "w", encoding="utf-8") as fjson:
+        # buffering=1 (linha a linha): cada registro vai para o disco na hora. Assim,
+        # se a varredura cair no meio (queda de energia, USB solta, janela fechada),
+        # o manifesto NAO perde o final que estaria preso no buffer — e o CSV e o
+        # JSONL param no mesmo ponto, nunca dessincronizados. O manifesto e, ele
+        # proprio, objeto de preservacao; nao pode depender do fechamento limpo.
+        with open(manifesto_csv, "w", newline="", encoding="utf-8", buffering=1) as fcsv, \
+             open(manifesto_json, "w", encoding="utf-8", buffering=1) as fjson:
             w = csv.DictWriter(fcsv, fieldnames=campos)
             w.writeheader()
 
