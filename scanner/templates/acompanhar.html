@@ -44,6 +44,7 @@
 <body>
   <h1>PRESERVA-SCAN · Progresso da varredura</h1>
   <p class="sub" id="alvo">—</p>
+  <p class="sub" id="retomando" style="display:none;color:#20456f"></p>
 
   <div id="banner" class="banner b-rodando">
     <span class="ponto pulsando"></span><span id="banner-txt">Conectando ao painel…</span>
@@ -118,6 +119,13 @@ async function tick(){
 
   document.getElementById("alvo").textContent =
     (s.disco ? "Disco: " + s.disco : "") + (s.raiz ? "  ·  " + s.raiz : "");
+
+  const ret = document.getElementById("retomando");
+  if(s.retomados && s.retomados > 0 && s.estado !== "concluido"){
+    ret.style.display = "block";
+    ret.textContent = "↻ Retomando: " + num(s.retomados) +
+      " arquivo(s) já estavam no inventário e serão pulados.";
+  } else { ret.style.display = "none"; }
 
   // ---- Banner de estado (a sinalização que o operador precisa ver) ----
   const banner = document.getElementById("banner");

@@ -77,7 +77,9 @@ docker compose exec scanner python scan.py --disco "Antigos-C" --raiz /mnt/hd --
 ## Garantias de segurança
 
 - **Somente leitura:** os discos são montados com `:ro`; o scanner só lê. Nunca move, copia ou apaga o acervo.
-- **Idempotência:** re-rodar não duplica registros (chave `disco_label + caminho`); arquivo já lido, com mesmo tamanho e data, é pulado. Um mesmo arquivo com hash diferente do anterior = alerta de alteração/corrupção.
+- **Idempotência / retomada:** re-rodar não duplica registros (chave `disco_label + caminho`); arquivo já lido, com mesmo tamanho e data, é pulado. Um mesmo arquivo com hash diferente do anterior = alerta de alteração/corrupção. Funciona **mesmo offline** (lê o próprio manifesto local): se uma varredura de horas cair, basta **rodar de novo o mesmo disco** — ele continua de onde parou, sem refazer o que já foi feito. Para forçar uma varredura do zero, use `--force`.
+- **Um manifesto por disco (nome estável):** `manifesto_<etiqueta>.csv`/`.jsonl` — é atualizado a cada passada (não cria um arquivo novo por dia), o que é o que permite a retomada.
+- **Escrita durável:** o manifesto é gravado **linha a linha em disco**; uma interrupção (queda de energia, USB solto, janela fechada) perde no máximo 1 registro, e CSV e JSONL nunca ficam dessincronizados.
 - **Redundância do inventário:** tudo é gravado em manifesto local (CSV + JSON) **antes** de ir ao banco. O catálogo é, ele próprio, objeto de preservação.
 
 ## O que este esqueleto entrega e o que falta

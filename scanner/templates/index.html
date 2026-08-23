@@ -5,74 +5,156 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PRESERVA-SCAN — Operação</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color:#1a1a1a; }
-    h1 { font-size: 1.4rem; }
-    .status { font-size:.85rem; color:#666; }
-    form { background:#f5f3ee; padding:1rem; border-radius:10px; margin:1rem 0; }
-    label { display:block; font-size:.85rem; margin:.5rem 0 .2rem; }
-    input { width:100%; padding:.5rem; border:1px solid #ccc; border-radius:6px; }
-    button { margin-top:1rem; padding:.6rem 1.2rem; border:0; border-radius:6px; background:#2b4a6f; color:#fff; cursor:pointer; }
-    table { width:100%; border-collapse:collapse; margin-top:1rem; font-size:.9rem; }
-    th,td { text-align:left; padding:.4rem .6rem; border-bottom:1px solid #eee; }
-    .warn { color:#a15; font-size:.85rem; }
-    .aviso-rodando { background:#eaf1fb; border:1px solid #b9d0f0; color:#20456f;
-                     padding:.7rem 1rem; border-radius:8px; margin:1rem 0; }
-    .aviso-rodando a { color:#20456f; font-weight:600; }
+    :root{ --azul:#2b4a6f; --azul2:#3a6ea5; --tinta:#1e1e1e; --cinza:#6b6b6b;
+           --papel:#f7f5f0; --linha:#e6e2d9; --verde:#1e5b32; --verdebg:#e9f6ec; }
+    *{ box-sizing:border-box; }
+    body{ font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:var(--tinta);
+          max-width:760px; margin:2rem auto; padding:0 1rem; line-height:1.5; }
+    h1{ font-size:1.4rem; margin:0 0 .2rem; }
+    .subtitulo{ color:var(--cinza); font-size:.92rem; margin:0 0 1rem; }
+    .pill{ display:inline-block; font-size:.78rem; padding:.15rem .6rem; border-radius:999px;
+           border:1px solid; vertical-align:middle; }
+    .pill-off{ color:#8a5a00; border-color:#f0d79a; background:#fff7e6; }
+    .pill-on{ color:var(--verde); border-color:#bfe4c7; background:var(--verdebg); }
+    .escudo{ display:inline-flex; gap:.4rem; align-items:center; background:var(--verdebg);
+             border:1px solid #bfe4c7; color:var(--verde); font-size:.82rem; font-weight:600;
+             padding:.35rem .7rem; border-radius:8px; margin:.2rem 0 1rem; }
+    .passos{ display:flex; gap:.4rem; flex-wrap:wrap; font-size:.83rem; color:var(--cinza);
+             margin-bottom:1rem; }
+    .passos b{ color:var(--azul); }
+    form{ background:var(--papel); border:1px solid var(--linha); padding:1.2rem 1.3rem;
+          border-radius:12px; }
+    .campo{ margin:0 0 1.1rem; }
+    .campo:last-of-type{ margin-bottom:0; }
+    label{ display:block; font-weight:600; font-size:.92rem; margin-bottom:.15rem; }
+    .ajuda{ display:block; color:var(--cinza); font-size:.8rem; margin-bottom:.4rem; }
+    select,input{ width:100%; padding:.6rem .65rem; border:1px solid #cbc7bd; border-radius:8px;
+                  font-size:.95rem; background:#fff; }
+    select:focus,input:focus{ outline:2px solid var(--azul2); border-color:var(--azul2); }
+    .obrig{ color:#a15; font-weight:700; }
+    .opc{ color:var(--cinza); font-weight:400; font-size:.8rem; }
+    details.avancado{ margin-top:.3rem; }
+    details.avancado summary{ cursor:pointer; color:var(--azul); font-size:.86rem; font-weight:600; }
+    details.avancado .campo{ margin-top:.8rem; }
+    button{ margin-top:1.2rem; width:100%; padding:.75rem 1rem; border:0; border-radius:9px;
+            background:var(--azul); color:#fff; font-size:1rem; font-weight:600; cursor:pointer; }
+    button:hover{ background:#24405f; }
+    button:disabled{ background:#9aa6b3; cursor:not-allowed; }
+    .aviso{ padding:.7rem 1rem; border-radius:9px; margin:1rem 0; font-size:.92rem; }
+    .a-rod{ background:#eaf1fb; border:1px solid #b9d0f0; color:#20456f; }
+    .a-ok{ background:var(--verdebg); border:1px solid #bfe4c7; color:var(--verde); }
+    .a-err{ background:#fdecec; border:1px solid #f2bcbc; color:#8a1f1f; }
+    .aviso a{ color:inherit; font-weight:700; }
+    .semdisco{ color:#8a5a00; font-size:.85rem; margin-top:.3rem; }
+    h2{ font-size:1.05rem; margin:1.6rem 0 .4rem; }
+    table{ width:100%; border-collapse:collapse; font-size:.9rem; }
+    th,td{ text-align:left; padding:.45rem .6rem; border-bottom:1px solid #eee; }
+    th{ color:var(--cinza); font-weight:600; font-size:.8rem; text-transform:uppercase; letter-spacing:.02em; }
+    .rodape{ margin-top:1.4rem; font-size:.83rem; color:var(--cinza); }
+    .rodape a{ color:var(--azul); }
   </style>
 </head>
 <body>
-  <h1>PRESERVA-SCAN · Operação da varredura</h1>
-  <p class="status">
-    {% if online %}Conectado ao banco (dados vão para o dashboard).{% else %}
-    <span class="warn">Modo offline: sem DATABASE_URL. Os dados ficam só no manifesto local.</span>{% endif %}
-  </p>
+  <h1>PRESERVA-SCAN
+    {% if online %}<span class="pill pill-on">conectado ao banco</span>
+    {% else %}<span class="pill pill-off">modo offline</span>{% endif %}
+  </h1>
+  <p class="subtitulo">Inventário do acervo — leitura de discos, sem alterar nada.</p>
+
+  <div class="escudo">🔒 Somente leitura — o programa nunca move, copia ou apaga arquivos do disco.</div>
 
   {% if rodando %}
-  <div class="aviso-rodando">
-    ⏳ Há uma varredura em andamento{% if job_disco %} — <b>{{ job_disco }}</b>{% endif %}.
-    <a href="/acompanhar">Acompanhar o progresso →</a>
-  </div>
+  <div class="aviso a-rod">⏳ Há uma varredura em andamento{% if job_disco %} — <b>{{ job_disco }}</b>{% endif %}.
+    <a href="/acompanhar">Acompanhar o progresso →</a></div>
   {% elif job_estado == 'concluido' %}
-  <div class="aviso-rodando" style="background:#e9f6ec;border-color:#bfe4c7;color:#1e5b32;">
-    ✅ Última varredura{% if job_disco %} de <b>{{ job_disco }}</b>{% endif %} concluída.
-    <a href="/acompanhar" style="color:#1e5b32;">Ver resultado →</a>
-  </div>
+  <div class="aviso a-ok">✅ Última varredura{% if job_disco %} de <b>{{ job_disco }}</b>{% endif %} concluída.
+    <a href="/acompanhar">Ver resultado →</a></div>
   {% elif job_estado == 'erro' %}
-  <div class="aviso-rodando" style="background:#fdecec;border-color:#f2bcbc;color:#8a1f1f;">
-    ⚠️ A última varredura{% if job_disco %} de <b>{{ job_disco }}</b>{% endif %} terminou com erro.
-    <a href="/acompanhar" style="color:#8a1f1f;">Ver o que aconteceu →</a>
-  </div>
+  <div class="aviso a-err">⚠️ A última varredura{% if job_disco %} de <b>{{ job_disco }}</b>{% endif %} terminou com erro.
+    <a href="/acompanhar">Ver o que aconteceu →</a></div>
   {% endif %}
 
+  <div class="passos"><span><b>1.</b> Ligue o HD</span> · <span><b>2.</b> Escolha abaixo</span> · <span><b>3.</b> Iniciar</span></div>
+
   <form action="/varrer" method="post">
-    <label>Disco a varrer (selecione)</label>
-    <select name="raiz" required>
-      {% for d in discos %}<option value="{{d}}">{{d}}</option>{% endfor %}
-    </select>
-    <label>Subpasta (opcional — deixe vazio para varrer o disco inteiro)</label>
-    <input name="subpasta" placeholder="ex.: INVENTAR">
-    <label>Etiqueta do disco (nome que vai para o catálogo, ex.: Antigos-C)</label>
-    <input name="disco" required>
-    <label>Grupo (antigos | uso_continuo | transporte)</label>
-    <input name="grupo" placeholder="antigos">
+    <div class="campo">
+      <label for="raiz">Qual disco varrer? <span class="obrig">*</span></label>
+      <span class="ajuda">Ligue o HD antes de abrir esta tela. Não apareceu? <a href="/" onclick="location.reload();return false;">atualizar lista</a>.</span>
+      <select id="raiz" name="raiz" required>
+        {% for d in discos %}
+        <option value="{{ d.valor }}" data-rotulo="{{ d.rotulo }}">{{ d.texto }}</option>
+        {% else %}
+        <option value="" disabled selected>Nenhum disco detectado — ligue um HD e atualize</option>
+        {% endfor %}
+      </select>
+      {% if not discos %}<div class="semdisco">Conecte o HD por USB e clique em “atualizar lista”.</div>{% endif %}
+    </div>
+
+    <div class="campo">
+      <label for="disco">Nome deste HD no catálogo <span class="obrig">*</span></label>
+      <span class="ajuda">É o apelido que identifica este disco no inventário. Já sugerimos o nome do volume — pode manter ou ajustar (ex.: <i>TRANSPORTE A</i>, <i>Antigos-C</i>).</span>
+      <input id="disco" name="disco" required placeholder="ex.: TRANSPORTE A">
+    </div>
+
+    <div class="campo">
+      <label for="grupo">Grupo do disco <span class="opc">(opcional)</span></label>
+      <span class="ajuda">Ajuda a organizar os HDs por finalidade. Na dúvida, deixe “não classificar”.</span>
+      <select id="grupo" name="grupo">
+        <option value="">— não classificar —</option>
+        <option value="antigos">Antigos (acervo histórico / arquivo morto)</option>
+        <option value="uso_continuo">Uso contínuo (material em uso no dia a dia)</option>
+        <option value="transporte">Transporte (HD usado para mover arquivos)</option>
+      </select>
+    </div>
+
+    <details class="avancado">
+      <summary>Opções avançadas</summary>
+      <div class="campo">
+        <label for="subpasta">Varrer só uma subpasta <span class="opc">(opcional)</span></label>
+        <span class="ajuda">Deixe <b>vazio</b> para varrer o disco inteiro (o normal). Preencha só se quiser limitar a uma pasta específica dentro do disco — ex.: <i>INVENTARIO</i>.</span>
+        <input id="subpasta" name="subpasta" placeholder="(vazio = disco inteiro)">
+      </div>
+    </details>
+
     {% if rodando %}
     <button type="submit" disabled title="Aguarde a varredura atual terminar">▶ Varredura em andamento…</button>
     {% else %}
-    <button type="submit">▶ Iniciar varredura (somente leitura)</button>
+    <button type="submit">▶ Iniciar varredura</button>
     {% endif %}
   </form>
 
-  <p><a href="/acompanhar">Acompanhar progresso</a> · <a href="/log">ver log ao vivo</a></p>
-
-  <h2 style="font-size:1.1rem">Discos</h2>
+  <h2>Discos já varridos</h2>
   <table>
     <tr><th>Disco</th><th>Grupo</th><th>Status</th><th>Arquivos</th><th>Tamanho</th></tr>
     {% for d in resumo %}
-    <tr><td>{{d[0]}}</td><td>{{d[1] or '—'}}</td><td>{{d[2]}}</td><td>{{d[3]}}</td>
+    <tr><td>{{ d[0] }}</td><td>{{ d[1] or '—' }}</td><td>{{ d[2] }}</td><td>{{ d[3] }}</td>
         <td>{{ '%.1f'|format((d[4] or 0)/1e12) }} TB</td></tr>
     {% else %}
-    <tr><td colspan="5">Nenhum disco varrido ainda.</td></tr>
+    <tr><td colspan="5" style="color:var(--cinza)">Nenhum disco varrido ainda{% if not online %} (ou em modo offline — o resumo vem do banco){% endif %}.</td></tr>
     {% endfor %}
   </table>
+
+  <p class="rodape"><a href="/acompanhar">Acompanhar progresso</a> · <a href="/log">ver log técnico</a></p>
+
+  <script>
+    // Preenche automaticamente o "nome no catálogo" com o rótulo do disco escolhido,
+    // a menos que a pessoa já tenha digitado algo à mão.
+    (function(){
+      var sel = document.getElementById('raiz');
+      var etq = document.getElementById('disco');
+      if(!sel || !etq) return;
+      var autopreenchido = true;
+      etq.addEventListener('input', function(){ autopreenchido = false; });
+      function aplicar(){
+        var opt = sel.options[sel.selectedIndex];
+        var rot = opt ? (opt.getAttribute('data-rotulo') || '') : '';
+        if(rot && (autopreenchido || etq.value.trim() === '')){
+          etq.value = rot; autopreenchido = true;
+        }
+      }
+      sel.addEventListener('change', aplicar);
+      aplicar();  // aplica para o disco já selecionado ao abrir
+    })();
+  </script>
 </body>
 </html>
