@@ -60,7 +60,7 @@ def _job_inicial():
         "iniciado_em": None, "varrendo_em": None,
         "ultimo_evento_em": None, "fim_em": None,
         "erro_msg": None, "returncode": None,
-        "avisos": [], "log_path": None,
+        "avisos": [], "log_path": None, "retomados": 0,
     }
 
 
@@ -71,21 +71,65 @@ def _rodando():
     return JOB["estado"] in ("contando", "identificando", "varrendo")
 
 
+def _humano_tb(nbytes):
+    if not nbytes:
+        return ""
+    for u in ("B", "KB", "MB", "GB", "TB", "PB"):
+        if nbytes < 1024:
+            return f"{nbytes:.1f} {u}".replace(".0 ", " ")
+        nbytes /= 1024
+    return f"{nbytes:.1f} PB"
+
+
+def _rotulo_volume_windows(letra):
+    """Nome do volume (ex.: 'TRANSPORTE A') de uma unidade Windows, via API do SO."""
+    try:
+        import ctypes
+        buf = ctypes.create_unicode_buffer(261)
+        fsbuf = ctypes.create_unicode_buffer(261)
+        ok = ctypes.windll.kernel32.GetVolumeInformationW(
+            ctypes.c_wchar_p(f"{letra}:\\"), buf, ctypes.sizeof(buf),
+            None, None, None, fsbuf, ctypes.sizeof(fsbuf))
+        return buf.value if ok else ""
+    except Exception:
+        return ""
+
+
 def discos_disponiveis():
-    """Lista os discos/volumes montados, para o operador escolher num menu (sem digitar caminho)."""
+    """Lista os discos montados com etiqueta e tamanho, para o operador escolher
+    num menu sem digitar caminho. Cada item:
+      {valor, letra, rotulo, tamanho, texto}  (texto = o que aparece no menu)."""
     achados = []
     if platform.system() == "Windows":
+        import shutil
         for letra in string.ascii_uppercase:
             p = f"{letra}:\\"
-            if os.path.exists(p):
-                achados.append(p)
+            if not os.path.exists(p):
+                continue
+            rotulo = _rotulo_volume_windows(letra)
+            try:
+                total = shutil.disk_usage(p).total
+            except Exception:
+                total = 0
+            texto = f"{letra}:  {rotulo}".rstrip()
+            if total:
+                texto += f"  ({_humano_tb(total)})"
+            achados.append({"valor": p, "letra": f"{letra}:", "rotulo": rotulo,
+                            "tamanho": _humano_tb(total), "texto": texto})
     else:
+        import shutil
         for base in ("/Volumes", f"/media/{os.environ.get('USER','')}", "/mnt"):
             if os.path.isdir(base):
                 for nome in sorted(os.listdir(base)):
                     full = os.path.join(base, nome)
                     if os.path.isdir(full):
-                        achados.append(full)
+                        try:
+                            total = shutil.disk_usage(full).total
+                        except Exception:
+                            total = 0
+                        texto = nome + (f"  ({_humano_tb(total)})" if total else "")
+                        achados.append({"valor": full, "letra": "", "rotulo": nome,
+                                        "tamanho": _humano_tb(total), "texto": texto})
     return achados
 
 
@@ -108,6 +152,8 @@ def _aplicar_evento(ev):
         avisos = JOB["avisos"]
         avisos.append({"arquivo": ev.get("arquivo"), "erro": ev.get("erro")})
         del avisos[:-20]                      # guarda so os ultimos 20
+    elif tipo == "retomar":
+        JOB["retomados"] = ev.get("ja", 0)
     elif tipo == "erro":
         JOB["estado"] = "erro"
         JOB["erro_msg"] = ev.get("msg")
@@ -216,7 +262,7 @@ def status():
         "decorrido": round(decorrido), "varrendo_ha": round(varrendo_ha),
         "parado_ha": round(parado_ha), "travado": travado,
         "erro_msg": JOB["erro_msg"], "avisos": JOB["avisos"],
-        "online": db.conectado(),
+        "retomados": JOB["retomados"], "online": db.conectado(),
     })
 
 

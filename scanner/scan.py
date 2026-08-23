@@ -189,15 +189,51 @@ def inspecionar(raiz: Path, mbps=120):
     return n, total
 
 
+def _ja_do_manifesto(caminho_jsonl: Path):
+    """Le um manifesto JSONL ja existente e devolve {caminho: (tamanho, mtime)}.
+    Base da RETOMADA offline: numa nova passada, os arquivos que ja estao no
+    inventario local sao pulados — sem precisar de banco."""
+    ja = {}
+    if not caminho_jsonl.exists():
+        return ja
+    try:
+        with open(caminho_jsonl, encoding="utf-8") as f:
+            for linha in f:
+                linha = linha.strip()
+                if not linha:
+                    continue
+                try:
+                    r = json.loads(linha)
+                    ja[r["caminho"]] = (r.get("tamanho_bytes"), r.get("mtime"))
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return ja
+
+
 def varrer(disco_label, raiz: Path, grupo=None, force=False):
     run_id = str(uuid.uuid4())
     MANIFESTOS.mkdir(parents=True, exist_ok=True)
-    manifesto_csv = MANIFESTOS / f"manifesto_{disco_label}_{datetime.date.today()}.csv"
-    manifesto_json = MANIFESTOS / f"manifesto_{disco_label}_{datetime.date.today()}.jsonl"
+    # Um manifesto por disco (nome estavel, sem data): e o que permite RETOMAR de
+    # onde parou e reconhecer o que ja foi inventariado numa nova passada.
+    manifesto_csv = MANIFESTOS / f"manifesto_{disco_label}.csv"
+    manifesto_json = MANIFESTOS / f"manifesto_{disco_label}.jsonl"
 
     db.registrar_disco(disco_label, grupo=grupo)
     db.abrir_run(run_id, disco_label)
-    ja = {} if force else db.ja_varridos(disco_label)
+
+    # O que ja foi lido antes (para pular): banco (se online) + manifesto local
+    # (offline). --force ignora tudo e revarre do zero.
+    ja = {}
+    if not force:
+        ja.update(db.ja_varridos(disco_label))
+        ja.update(_ja_do_manifesto(manifesto_json))
+    retomando = bool(ja)
+    if retomando:
+        _emit({"event": "retomar", "ja": len(ja)}, forcar=True)
+        print(f"Retomando: {len(ja)} arquivo(s) ja no inventario serao pulados.",
+              flush=True)
 
     # Fase 0 (so com painel): conta arquivos/bytes antes, para a barra ter um
     # denominador. Uma passada leve (stat, sem hash); emite batimentos para o
@@ -242,10 +278,18 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
         # o manifesto NAO perde o final que estaria preso no buffer — e o CSV e o
         # JSONL param no mesmo ponto, nunca dessincronizados. O manifesto e, ele
         # proprio, objeto de preservacao; nao pode depender do fechamento limpo.
-        with open(manifesto_csv, "w", newline="", encoding="utf-8", buffering=1) as fcsv, \
-             open(manifesto_json, "w", encoding="utf-8", buffering=1) as fjson:
+        # Retomando (nao-force e ja havia manifesto): ANEXA em vez de truncar,
+        # para nao apagar o que ja foi inventariado. O cabecalho do CSV so e
+        # escrito quando o arquivo esta comecando do zero.
+        anexar = retomando and not force
+        modo = "a" if anexar else "w"
+        csv_ja_tem_cabecalho = (manifesto_csv.exists()
+                                and manifesto_csv.stat().st_size > 0)
+        with open(manifesto_csv, modo, newline="", encoding="utf-8", buffering=1) as fcsv, \
+             open(manifesto_json, modo, encoding="utf-8", buffering=1) as fjson:
             w = csv.DictWriter(fcsv, fieldnames=campos)
-            w.writeheader()
+            if not (anexar and csv_ja_tem_cabecalho):
+                w.writeheader()
 
             for dirpath, _, files in os.walk(raiz):
                 for nome in files:
