@@ -11,6 +11,7 @@ O dashboard analitico (para o gestor, remoto) e outro app, no Vercel, lendo o Su
 import os
 import sys
 import time
+import html
 import string
 import platform
 import threading
@@ -23,7 +24,8 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 import db
-import scan  # a varredura roda no MESMO processo (essencial para o .exe empacotado)
+import scan       # a varredura roda no MESMO processo (essencial para o .exe empacotado)
+import relatorio  # gera o relatório local (dashboard + planilhas) a partir dos manifestos
 
 
 def _recurso(rel):
@@ -209,9 +211,10 @@ def home(request: Request):
                 resumo = cur.fetchall()
         except Exception:
             resumo = []
+    tem_manifestos = bool(list(MANIFEST_DIR.glob("manifesto_*.jsonl")))
     return templates.TemplateResponse(request, "index.html", {
         "resumo": resumo, "online": db.conectado(),
-        "discos": discos_disponiveis(),
+        "discos": discos_disponiveis(), "tem_manifestos": tem_manifestos,
         "rodando": _rodando(), "job_estado": JOB["estado"], "job_disco": JOB["disco"],
     })
 
@@ -264,6 +267,32 @@ def status():
         "erro_msg": JOB["erro_msg"], "avisos": JOB["avisos"],
         "retomados": JOB["retomados"], "online": db.conectado(),
     })
+
+
+RELATORIO_DIR = MANIFEST_DIR / "relatorio"
+
+
+@app.post("/relatorio")
+def gerar_relatorio():
+    # Rota síncrona (def): o Starlette a executa num threadpool, sem travar o painel.
+    try:
+        relatorio.gerar(MANIFEST_DIR, RELATORIO_DIR)
+    except FileNotFoundError as e:
+        return HTMLResponse(f"<p>{html.escape(str(e))} <a href='/'>voltar</a></p>", status_code=400)
+    except Exception as e:
+        return HTMLResponse(
+            f"<p>Falha ao gerar o relatório: {html.escape(type(e).__name__)}: "
+            f"{html.escape(str(e))} <a href='/'>voltar</a></p>", status_code=500)
+    return RedirectResponse(url="/relatorio/ver", status_code=303)
+
+
+@app.get("/relatorio/ver", response_class=HTMLResponse)
+def ver_relatorio():
+    dash = RELATORIO_DIR / "dashboard.html"
+    if not dash.exists():
+        return HTMLResponse("<p>Relatório ainda não gerado. <a href='/'>voltar</a></p>",
+                            status_code=404)
+    return HTMLResponse(dash.read_text(encoding="utf-8", errors="replace"))
 
 
 @app.get("/log", response_class=PlainTextResponse)

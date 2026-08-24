@@ -123,6 +123,17 @@
     {% endif %}
   </form>
 
+  <h2>Relatório do acervo</h2>
+  {% if tem_manifestos %}
+  <p class="ajuda" style="margin-bottom:.5rem">Gera um painel visual + planilhas (inventário consolidado e duplicatas entre discos) a partir de tudo que já foi varrido. É um arquivo que você guarda e abre offline — não precisa de banco nem internet.</p>
+  <form action="/relatorio" method="post" style="background:none;border:0;padding:0;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+    <button type="submit" style="width:auto;margin:0;background:#1e5b32">📊 Gerar / atualizar relatório</button>
+    <a href="/relatorio/ver" style="font-size:.9rem;color:var(--azul)">ver último relatório</a>
+  </form>
+  {% else %}
+  <p class="ajuda">Disponível após a primeira varredura — ele resume o acervo (volume, formatos, duplicatas) num painel que você guarda.</p>
+  {% endif %}
+
   <h2>Discos já varridos</h2>
   <table>
     <tr><th>Disco</th><th>Grupo</th><th>Status</th><th>Arquivos</th><th>Tamanho</th></tr>
