@@ -81,6 +81,32 @@ def _norm(p):
     return str(p).replace("\\", "/")
 
 
+def _dirs_ferramentas():
+    """Pastas onde procurar binários (mediainfo, exiftool, sf): embutidos no .exe
+    (_MEIPASS/ferramentas) ou numa pasta 'ferramentas' ao lado do programa. Assim
+    o operador NÃO precisa instalar nem configurar PATH — basta o .exe."""
+    dirs = []
+    mp = getattr(sys, "_MEIPASS", None)
+    if mp:
+        dirs.append(Path(mp) / "ferramentas")
+    if getattr(sys, "frozen", False):
+        dirs.append(Path(sys.executable).parent / "ferramentas")
+    dirs.append(Path(__file__).parent / "ferramentas")
+    dirs.append(Path.cwd() / "ferramentas")
+    return dirs
+
+
+def ferramenta(nome):
+    """Caminho do executável `nome` (ex.: 'mediainfo'): primeiro nas pastas
+    'ferramentas', depois no PATH do sistema. None se não achar."""
+    for d in _dirs_ferramentas():
+        for c in (nome, nome + ".exe"):
+            p = d / c
+            if p.exists():
+                return str(p)
+    return shutil.which(nome)
+
+
 def sha256_de(caminho: Path, pulso=None) -> str:
     """Calcula o SHA-256 lendo em blocos. `pulso(bytes_lidos)` e chamado a cada
     bloco: serve de batimento cardiaco para o painel enxergar que um arquivo
@@ -100,7 +126,8 @@ def siegfried_lote(raiz: Path):
     """Roda o Siegfried UMA vez sobre a arvore inteira (rapido) e devolve
     {caminho_relativo: (puid, formato)}. Substitui a chamada por-arquivo, que
     nao escala: 125 mil arquivos = 125 mil processos. Em lote = 1 processo."""
-    if not shutil.which("sf"):
+    sf = ferramenta("sf")
+    if not sf:
         print("AVISO: 'sf' (Siegfried) nao encontrado; seguindo sem identificacao de formato.")
         return {}
     mapa = {}
@@ -109,7 +136,7 @@ def siegfried_lote(raiz: Path):
         fd, tmp = tempfile.mkstemp(suffix=".json")
         os.close(fd)
         with open(tmp, "w", encoding="utf-8") as out:
-            subprocess.run(["sf", "-json", str(raiz)], stdout=out,
+            subprocess.run([sf, "-json", str(raiz)], stdout=out,
                            stderr=subprocess.DEVNULL, check=False)
         with open(tmp, encoding="utf-8") as f:
             data = json.load(f)
@@ -132,10 +159,11 @@ def siegfried_lote(raiz: Path):
 
 def mediainfo(caminho: Path):
     """Metadados tecnicos AV (codec, resolucao, duracao...) via MediaInfo."""
-    if not shutil.which("mediainfo"):
+    exe = ferramenta("mediainfo")
+    if not exe:
         return None
     try:
-        r = subprocess.run(["mediainfo", "--Output=JSON", str(caminho)],
+        r = subprocess.run([exe, "--Output=JSON", str(caminho)],
                            capture_output=True, text=True, timeout=180)
         return json.loads(r.stdout) if r.stdout.strip() else None
     except Exception:
@@ -144,10 +172,11 @@ def mediainfo(caminho: Path):
 
 def exiftool(caminho: Path):
     """Metadados embutidos (imagens/documentos) via ExifTool — complementa o MediaInfo."""
-    if not shutil.which("exiftool"):
+    exe = ferramenta("exiftool")
+    if not exe:
         return None
     try:
-        r = subprocess.run(["exiftool", "-json", str(caminho)],
+        r = subprocess.run([exe, "-json", str(caminho)],
                            capture_output=True, text=True, timeout=120)
         data = json.loads(r.stdout)
         return data[0] if data else None
@@ -388,6 +417,75 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
         print("(modo offline: dados so no manifesto local; defina DATABASE_URL para enviar ao dashboard)")
 
 
+def backfill(disco_label, raiz: Path):
+    """Completa SÓ os metadados de A/V e imagem (MediaInfo/ExifTool) dos arquivos
+    que ficaram sem eles — SEM re-hashear. Usa o manifesto já existente: para cada
+    registro com `mediainfo` vazio e extensão de mídia, localiza o arquivo no disco,
+    roda a ferramenta e atualiza o registro (manifesto local + banco). O SHA-256 e a
+    identificação de formato não são recalculados."""
+    manifesto_json = MANIFESTOS / f"manifesto_{disco_label}.jsonl"
+    if not manifesto_json.exists():
+        msg = f"Manifesto não encontrado: {manifesto_json}. Faça a varredura antes."
+        _emit({"event": "erro", "msg": msg}, forcar=True)
+        sys.exit(msg)
+    tem_mi = ferramenta("mediainfo") is not None
+    tem_et = ferramenta("exiftool") is not None
+    if not (tem_mi or tem_et):
+        msg = "Nenhuma ferramenta de metadados disponível (instale/forneça MediaInfo e ExifTool)."
+        _emit({"event": "erro", "msg": msg}, forcar=True)
+        sys.exit(msg)
+
+    db.registrar_disco(disco_label)
+    _emit({"event": "phase", "fase": "completando"}, forcar=True)
+    total = sum(1 for _ in open(manifesto_json, encoding="utf-8", errors="replace"))
+    _emit({"event": "total", "total": total}, forcar=True)
+    print(f"Completando metadados de '{disco_label}' ({total} registros)...", flush=True)
+
+    tmp = manifesto_json.with_name(manifesto_json.name + ".tmp")
+    lidos = feitos = 0
+    lote = []
+    with open(manifesto_json, encoding="utf-8", errors="replace") as fin, \
+         open(tmp, "w", encoding="utf-8", buffering=1) as fout:
+        for linha in fin:
+            linha = linha.rstrip("\n")
+            if not linha.strip():
+                continue
+            try:
+                r = json.loads(linha)
+            except Exception:
+                fout.write(linha + "\n"); continue
+            lidos += 1
+            ext = (r.get("extensao") or "").lower()
+            vazio = r.get("mediainfo") in (None, {}, "")
+            if vazio and (ext in EXT_VIDEO_AUDIO or ext in EXT_IMAGEM):
+                alvo = Path(raiz) / r.get("caminho", "")
+                meta = None
+                try:
+                    if ext in EXT_VIDEO_AUDIO and tem_mi:
+                        meta = mediainfo(alvo)
+                    elif ext in EXT_IMAGEM and tem_et:
+                        meta = exiftool(alvo)
+                except Exception:
+                    meta = None
+                if meta is not None:
+                    r["mediainfo"] = meta
+                    feitos += 1
+                    lote.append(r)
+                    if len(lote) >= LOTE_DB:
+                        db.enviar_lote(lote); lote = []
+            fout.write(json.dumps(r, ensure_ascii=False) + "\n")
+            if lidos % 200 == 0:
+                _emit({"event": "progress", "fase": "completando", "lidos": lidos,
+                       "novos": feitos, "total": total, "arquivo": r.get("caminho")},
+                      mingap=1.0)
+    db.enviar_lote(lote)
+    os.replace(tmp, manifesto_json)
+    _emit({"event": "done", "lidos": lidos, "novos": feitos, "total": total,
+           "online": db.conectado()}, forcar=True)
+    print(f"\nOK — backfill '{disco_label}': {lidos} verificados, "
+          f"{feitos} completados com metadados de mídia (sem re-hash).", flush=True)
+
+
 def main():
     p = argparse.ArgumentParser(description="Varredura somente-leitura de um disco do acervo.")
     p.add_argument("--disco", required=True, help="Etiqueta do HD (ex.: Antigos-C)")
@@ -396,6 +494,8 @@ def main():
     p.add_argument("--force", action="store_true", help="Re-varre tudo, ignorando o ja lido")
     p.add_argument("--dry-run", action="store_true",
                    help="So conta arquivos/bytes e estima o tempo; nao calcula hash nem grava nada")
+    p.add_argument("--backfill", action="store_true",
+                   help="So completa metadados de midia (MediaInfo/ExifTool) que faltaram, sem re-hash")
     p.add_argument("--progress-json", action="store_true",
                    help="Emite eventos de progresso (linhas '@@PS@@ {json}') para o painel")
     a = p.parse_args()
@@ -407,6 +507,9 @@ def main():
     if a.dry_run:
         print(f"[DRY-RUN] Inspecionando '{a.disco}' em {a.raiz} (nada sera calculado ou gravado)\n")
         inspecionar(a.raiz)
+        return
+    if a.backfill:
+        backfill(a.disco, a.raiz)
         return
     varrer(a.disco, a.raiz, a.grupo, a.force)
 

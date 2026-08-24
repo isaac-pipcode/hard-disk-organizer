@@ -33,6 +33,18 @@ jobs:
           pip install -r scanner/requirements.txt
           pip install pyinstaller==6.11.1
 
+      - name: Embutir MediaInfo + ExifTool (best-effort)
+        continue-on-error: true      # se falhar, o .exe sai sem os binários (fallback: pasta/PATH)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path packaging/ferramentas | Out-Null
+          choco install mediainfo-cli exiftool -y --no-progress
+          $mi = Get-ChildItem -Recurse -Path C:\ProgramData\chocolatey\lib\mediainfo-cli -Filter MediaInfo.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          $et = Get-ChildItem -Recurse -Path C:\ProgramData\chocolatey\lib\exiftool     -Filter exiftool.exe  -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($mi) { Copy-Item $mi.FullName packaging/ferramentas/ ; Write-Host "MediaInfo: $($mi.FullName)" }
+          if ($et) { Copy-Item $et.FullName packaging/ferramentas/ ; Write-Host "ExifTool:  $($et.FullName)" }
+          Get-ChildItem packaging/ferramentas
+
       - name: Compilar o executável
         run: pyinstaller packaging/preservascan.spec --noconfirm
 

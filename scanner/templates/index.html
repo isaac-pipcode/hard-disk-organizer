@@ -46,6 +46,12 @@
     .a-err{ background:#fdecec; border:1px solid #f2bcbc; color:#8a1f1f; }
     .aviso a{ color:inherit; font-weight:700; }
     .semdisco{ color:#8a5a00; font-size:.85rem; margin-top:.3rem; }
+    .ferramentas{ margin:.2rem 0 1.1rem; font-size:.82rem; color:var(--cinza); }
+    .fbadge{ display:inline-block; border:1px solid; border-radius:999px; padding:.05rem .5rem; margin:0 .25rem .25rem 0; font-size:.76rem; }
+    .fbadge.ok{ color:var(--verde); border-color:#bfe4c7; background:#e9f6ec; }
+    .fbadge.no{ color:#8a5a00; border-color:#f0d79a; background:#fff7e6; }
+    button.secund{ background:#6b5636; }
+    button.secund:hover{ background:#574529; }
     h2{ font-size:1.05rem; margin:1.6rem 0 .4rem; }
     table{ width:100%; border-collapse:collapse; font-size:.9rem; }
     th,td{ text-align:left; padding:.45rem .6rem; border-bottom:1px solid #eee; }
@@ -116,10 +122,21 @@
       </div>
     </details>
 
+    <div class="ferramentas">
+      Metadados:
+      {% for nome, rot in [('siegfried','Siegfried (formato)'), ('mediainfo','MediaInfo (A/V)'), ('exiftool','ExifTool (imagem)')] %}
+        <span class="fbadge {{ 'ok' if ferramentas[nome] else 'no' }}">{{ rot }}: {{ '✓ disponível' if ferramentas[nome] else '— ausente' }}</span>
+      {% endfor %}
+      {% if not ferramentas.mediainfo %}
+      <div class="ajuda" style="color:#8a5a00;margin-top:.3rem">Sem o <b>MediaInfo</b>, os metadados técnicos de áudio/vídeo não são capturados. Coloque <code>MediaInfo.exe</code> e <code>exiftool.exe</code> numa pasta <code>ferramentas</code> ao lado do programa — depois é só clicar em “Completar metadados”.</div>
+      {% endif %}
+    </div>
+
     {% if rodando %}
-    <button type="submit" disabled title="Aguarde a varredura atual terminar">▶ Varredura em andamento…</button>
+    <button type="submit" disabled title="Aguarde a operação atual terminar">▶ Operação em andamento…</button>
     {% else %}
     <button type="submit">▶ Iniciar varredura</button>
+    <button type="submit" class="secund" formaction="/backfill" title="Completa só os metadados de áudio/vídeo/imagem que faltaram, sem re-varrer o disco">＋ Completar metadados de mídia (sem re-varrer)</button>
     {% endif %}
   </form>
 

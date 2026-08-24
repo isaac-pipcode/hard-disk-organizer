@@ -70,7 +70,17 @@ JOB = _job_inicial()
 
 
 def _rodando():
-    return JOB["estado"] in ("contando", "identificando", "varrendo")
+    return JOB["estado"] in ("contando", "identificando", "varrendo", "completando")
+
+
+def ferramentas_status():
+    """Quais ferramentas externas o scanner enxerga (embutidas no .exe, numa pasta
+    'ferramentas' ao lado, ou no PATH)."""
+    return {
+        "siegfried": scan.ferramenta("sf") is not None,
+        "mediainfo": scan.ferramenta("mediainfo") is not None,
+        "exiftool": scan.ferramenta("exiftool") is not None,
+    }
 
 
 def _humano_tb(nbytes):
@@ -154,6 +164,10 @@ def _aplicar_evento(ev):
         avisos = JOB["avisos"]
         avisos.append({"arquivo": ev.get("arquivo"), "erro": ev.get("erro")})
         del avisos[:-20]                      # guarda so os ultimos 20
+    elif tipo == "done":
+        for k in ("lidos", "novos", "erros", "bytes_lidos", "total", "total_bytes"):
+            if ev.get(k) is not None:
+                JOB[k] = ev[k]
     elif tipo == "retomar":
         JOB["retomados"] = ev.get("ja", 0)
     elif tipo == "erro":
@@ -168,7 +182,7 @@ def _sink(ev):
     _aplicar_evento(ev)
 
 
-def _rodar(disco, raiz, grupo):
+def _rodar(disco, raiz, grupo, modo="varredura"):
     MANIFEST_DIR.mkdir(parents=True, exist_ok=True)
     log_path = MANIFEST_DIR / f"operacao_{disco}_{time.strftime('%Y%m%d_%H%M%S')}.log"
     JOB["log_path"] = str(log_path)
@@ -181,19 +195,23 @@ def _rodar(disco, raiz, grupo):
     scan.CALLBACK = _sink
     try:
         with open(log_path, "w", encoding="utf-8") as flog:
-            flog.write(f"=== varredura {disco} ({raiz}) — {time.ctime()} ===\n")
+            flog.write(f"=== {modo} {disco} ({raiz}) — {time.ctime()} ===\n")
             flog.flush()
             with contextlib.redirect_stdout(flog), contextlib.redirect_stderr(flog):
-                scan.varrer(disco, Path(raiz), grupo, force=False)
+                if modo == "backfill":
+                    scan.backfill(disco, Path(raiz))
+                else:
+                    scan.varrer(disco, Path(raiz), grupo, force=False)
         JOB["returncode"] = 0
         if JOB["estado"] != "erro":
             JOB["estado"] = "concluido"
-    except Exception as e:
-        # varrer ja emitiu o evento 'erro' (que marcou o estado); aqui garantimos
-        # a mensagem mesmo que o erro tenha vindo de fora do bloco tratado.
+    except (Exception, SystemExit) as e:
+        # varrer/backfill já emitiram o evento 'erro' (que marcou o estado); aqui
+        # garantimos a mensagem mesmo que o erro tenha vindo de fora do bloco tratado
+        # (backfill sinaliza falta de manifesto/ferramenta com SystemExit).
         JOB["estado"] = "erro"
         JOB["returncode"] = 1
-        JOB["erro_msg"] = JOB["erro_msg"] or f"{type(e).__name__}: {e}"
+        JOB["erro_msg"] = JOB["erro_msg"] or f"{e}"
     finally:
         JOB["fim_em"] = time.time()
         scan.CALLBACK = None
@@ -216,6 +234,7 @@ def home(request: Request):
         "resumo": resumo, "online": db.conectado(),
         "discos": discos_disponiveis(), "tem_manifestos": tem_manifestos,
         "rodando": _rodando(), "job_estado": JOB["estado"], "job_disco": JOB["disco"],
+        "ferramentas": ferramentas_status(),
     })
 
 
@@ -242,6 +261,32 @@ def varrer(disco: str = Form(...), raiz: str = Form(...), subpasta: str = Form("
     return RedirectResponse(url="/acompanhar", status_code=303)
 
 
+@app.post("/backfill")
+def backfill(disco: str = Form(...), raiz: str = Form(...), subpasta: str = Form(""), grupo: str = Form("")):
+    """Completa só os metadados de mídia que faltaram, sem re-hashear."""
+    caminho = os.path.join(raiz, subpasta) if subpasta.strip() else raiz
+    if not disco.strip():
+        return HTMLResponse("<p>Informe a etiqueta do disco. <a href='/'>voltar</a></p>", status_code=400)
+    if not os.path.isdir(caminho):
+        return HTMLResponse(
+            f"<p>Caminho não encontrado: <b>{html.escape(caminho)}</b>. Ligue o disco. "
+            f"<a href='/'>voltar</a></p>", status_code=400)
+    if not (MANIFEST_DIR / f"manifesto_{disco.strip()}.jsonl").exists():
+        return HTMLResponse(
+            f"<p>Ainda não há manifesto para <b>{html.escape(disco.strip())}</b> — "
+            f"faça a varredura antes de completar metadados. <a href='/'>voltar</a></p>", status_code=400)
+    if not _lock.acquire(blocking=False):
+        return HTMLResponse("<p>Já existe uma operação em andamento. "
+                            "<a href='/acompanhar'>acompanhar</a></p>", status_code=409)
+    JOB.update(_job_inicial())
+    JOB.update({"estado": "completando", "disco": disco.strip(), "raiz": caminho,
+                "iniciado_em": time.time(), "ultimo_evento_em": time.time()})
+    threading.Thread(target=_rodar,
+                     args=(disco.strip(), caminho, grupo.strip() or None, "backfill"),
+                     daemon=True).start()
+    return RedirectResponse(url="/acompanhar", status_code=303)
+
+
 @app.get("/acompanhar", response_class=HTMLResponse)
 def acompanhar(request: Request):
     return templates.TemplateResponse(request, "acompanhar.html", {})
@@ -254,7 +299,7 @@ def status():
     parado_ha = (agora - ult) if ult else 0
     # So consideramos "travado" nas fases que emitem batimento (contando/varrendo).
     # A fase 'identificando' (Siegfried) e naturalmente silenciosa e pode levar minutos.
-    travado = _rodando() and JOB["estado"] in ("contando", "varrendo") and parado_ha > STALL_SEGUNDOS
+    travado = _rodando() and JOB["estado"] in ("contando", "varrendo", "completando") and parado_ha > STALL_SEGUNDOS
     decorrido = (agora - JOB["iniciado_em"]) if JOB["iniciado_em"] else 0
     varrendo_ha = (agora - JOB["varrendo_em"]) if JOB["varrendo_em"] else 0
     return JSONResponse({
