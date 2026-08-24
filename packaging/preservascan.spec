@@ -31,11 +31,20 @@ hiddenimports += [
     "uvicorn.lifespan.on",
 ]
 
+# Ferramentas externas (MediaInfo.exe, exiftool.exe) — se a CI baixou para
+# packaging/ferramentas, empacota junto para o operador NÃO precisar instalar nada.
+# Se a pasta estiver ausente/vazia, o build segue e o scanner usa a pasta
+# 'ferramentas' ao lado do .exe ou o PATH (fallbacks do resolvedor).
+_datas = [(os.path.join(SCANNER, "templates"), "templates")]
+_fer = os.path.join(SPECPATH, "ferramentas")
+if os.path.isdir(_fer) and os.listdir(_fer):
+    _datas.append((_fer, "ferramentas"))
+
 a = Analysis(
     [os.path.join(SCANNER, "preservascan.py")],
     pathex=[SCANNER],                         # panel/scan/db sao irmaos do entrypoint
     binaries=[],
-    datas=[(os.path.join(SCANNER, "templates"), "templates")],  # HTML -> _MEIPASS/templates
+    datas=_datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},

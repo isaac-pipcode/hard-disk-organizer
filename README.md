@@ -82,6 +82,30 @@ docker compose exec scanner python scan.py --disco "Antigos-C" --raiz /mnt/hd --
 - **Escrita durável:** o manifesto é gravado **linha a linha em disco**; uma interrupção (queda de energia, USB solto, janela fechada) perde no máximo 1 registro, e CSV e JSONL nunca ficam dessincronizados.
 - **Redundância do inventário:** tudo é gravado em manifesto local (CSV + JSON) **antes** de ir ao banco. O catálogo é, ele próprio, objeto de preservação.
 
+## Metadados de mídia (MediaInfo / ExifTool)
+
+Para um acervo audiovisual, os metadados técnicos (codec, resolução, duração,
+taxa de amostragem, profundidade de bits…) são parte da preservação. O scanner
+usa **MediaInfo** (áudio/vídeo) e **ExifTool** (imagens); o **Siegfried** já
+identifica o formato/PRONOM.
+
+Onde o programa procura essas ferramentas (nesta ordem): **embutidas no `.exe`**
+(quando a build conseguiu incluí-las) → uma pasta **`ferramentas/` ao lado do
+`.exe`** (basta colocar `MediaInfo.exe` e `exiftool.exe` lá — sem instalar nada,
+sem PATH) → o **PATH** do sistema. O painel mostra em selos quais estão
+disponíveis.
+
+**Completar metadados que faltaram (sem re-hashear):** se um disco foi varrido
+sem MediaInfo/ExifTool, não é preciso refazer a varredura (horas de hash). Use o
+botão **"Completar metadados de mídia"** no painel, ou:
+
+```bash
+python scanner/scan.py --disco "TRANSPORTE A" --raiz F:\ --backfill
+```
+
+Ele percorre o manifesto, roda só as ferramentas de mídia nos arquivos que ainda
+não têm metadados e atualiza o manifesto e o banco — **sem recalcular o SHA-256**.
+
 ## Relatório local (sem banco, sem custo)
 
 A partir dos manifestos já varridos, o sistema gera um **relatório do acervo** —

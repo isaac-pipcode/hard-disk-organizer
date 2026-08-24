@@ -19,6 +19,8 @@ build/
 dist/
 *.exe
 *.spec.bak
+packaging/ferramentas/
+scanner/ferramentas/
 
 # Gerado em runtime pelo painel/executável
 ENDERECO_DO_PAINEL.txt
