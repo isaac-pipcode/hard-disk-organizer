@@ -22,6 +22,7 @@ dist/
 
 # Gerado em runtime pelo painel/executável
 ENDERECO_DO_PAINEL.txt
+/relatorio/
 
 # Logs
 logs

@@ -82,6 +82,28 @@ docker compose exec scanner python scan.py --disco "Antigos-C" --raiz /mnt/hd --
 - **Escrita durável:** o manifesto é gravado **linha a linha em disco**; uma interrupção (queda de energia, USB solto, janela fechada) perde no máximo 1 registro, e CSV e JSONL nunca ficam dessincronizados.
 - **Redundância do inventário:** tudo é gravado em manifesto local (CSV + JSON) **antes** de ir ao banco. O catálogo é, ele próprio, objeto de preservação.
 
+## Relatório local (sem banco, sem custo)
+
+A partir dos manifestos já varridos, o sistema gera um **relatório do acervo** —
+sem depender de banco ou nuvem. No painel, botão **"Gerar / atualizar relatório"**;
+ou pela linha de comando:
+
+```bash
+python scanner/relatorio.py --manifestos ./manifestos --saida ./relatorio
+```
+
+Saída (na pasta `relatorio/`), tudo em formato aberto que a instituição guarda:
+
+- `dashboard.html` — painel visual **estático** (abre no navegador, offline): volume
+  por disco, formatos mais frequentes, duplicatas e resumo.
+- `inventario_consolidado.csv` — todos os discos num arquivo só.
+- `duplicatas.csv` — arquivos idênticos (mesmo SHA-256) e **em quantos discos**
+  aparecem (responde "está em 1 ou em 2+ discos", como a view `duplicidade` do banco).
+- `resumo.json` — números do acervo, para outras ferramentas.
+
+É a alternativa soberana e de custo zero ao dashboard hospedado: o mesmo valor
+analítico, como um arquivo que não expira nem depende de assinatura.
+
 ## O que este esqueleto entrega e o que falta
 
 Entregue: varredura (rclone/Siegfried/MediaInfo/ExifTool/SHA-256), idempotência,

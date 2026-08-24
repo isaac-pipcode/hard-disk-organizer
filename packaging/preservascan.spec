@@ -22,6 +22,7 @@ hiddenimports = []
 for pacote in ("uvicorn", "starlette", "fastapi", "anyio"):
     hiddenimports += collect_submodules(pacote)
 hiddenimports += [
+    "relatorio",                 # gerador do relatorio local (importado pelo panel)
     "multipart",                 # python-multipart (formularios do painel)
     "psycopg2", "psycopg2.extras",
     "uvicorn.loops.asyncio",
