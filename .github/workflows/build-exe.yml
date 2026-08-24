@@ -39,11 +39,14 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path packaging/ferramentas | Out-Null
           choco install mediainfo-cli exiftool -y --no-progress
+          # MediaInfo CLI é um .exe autossuficiente
           $mi = Get-ChildItem -Recurse -Path C:\ProgramData\chocolatey\lib\mediainfo-cli -Filter MediaInfo.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-          $et = Get-ChildItem -Recurse -Path C:\ProgramData\chocolatey\lib\exiftool     -Filter exiftool.exe  -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($mi) { Copy-Item $mi.FullName packaging/ferramentas/ ; Write-Host "MediaInfo: $($mi.FullName)" }
-          if ($et) { Copy-Item $et.FullName packaging/ferramentas/ ; Write-Host "ExifTool:  $($et.FullName)" }
-          Get-ChildItem packaging/ferramentas
+          # ExifTool: o exiftool.exe é só um LANÇADOR; precisa da pasta exiftool_files ao
+          # lado para funcionar. Copiamos a pasta inteira do build 64-bit.
+          $etDir = Get-ChildItem -Directory -Recurse -Path C:\ProgramData\chocolatey\lib\exiftool -Filter "exiftool*_64" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($etDir) { Copy-Item "$($etDir.FullName)\*" packaging/ferramentas/ -Recurse -Force ; Write-Host "ExifTool dir: $($etDir.FullName)" }
+          Get-ChildItem -Recurse packaging/ferramentas | Select-Object FullName, Length
 
       - name: Compilar o executável
         run: pyinstaller packaging/preservascan.spec --noconfirm

@@ -128,7 +128,7 @@
         <span class="fbadge {{ 'ok' if ferramentas[nome] else 'no' }}">{{ rot }}: {{ '✓ disponível' if ferramentas[nome] else '— ausente' }}</span>
       {% endfor %}
       {% if not ferramentas.mediainfo %}
-      <div class="ajuda" style="color:#8a5a00;margin-top:.3rem">Sem o <b>MediaInfo</b>, os metadados técnicos de áudio/vídeo não são capturados. Coloque <code>MediaInfo.exe</code> e <code>exiftool.exe</code> numa pasta <code>ferramentas</code> ao lado do programa — depois é só clicar em “Completar metadados”.</div>
+      <div class="ajuda" style="color:#8a5a00;margin-top:.3rem">Sem o <b>MediaInfo</b>, os metadados técnicos de áudio/vídeo não são capturados. Coloque <code>MediaInfo.exe</code> (e, para imagens, <code>exiftool.exe</code> junto da pasta <code>exiftool_files</code>) numa pasta <code>ferramentas</code> ao lado do programa — depois é só clicar em “Completar metadados”.</div>
       {% endif %}
     </div>
 

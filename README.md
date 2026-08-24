@@ -91,9 +91,13 @@ identifica o formato/PRONOM.
 
 Onde o programa procura essas ferramentas (nesta ordem): **embutidas no `.exe`**
 (quando a build conseguiu incluí-las) → uma pasta **`ferramentas/` ao lado do
-`.exe`** (basta colocar `MediaInfo.exe` e `exiftool.exe` lá — sem instalar nada,
-sem PATH) → o **PATH** do sistema. O painel mostra em selos quais estão
+`.exe`** → o **PATH** do sistema. O painel mostra em selos quais estão
 disponíveis.
+
+Para preencher a pasta `ferramentas/` à mão (sem instalar nada, sem PATH): coloque
+`MediaInfo.exe` (o CLI, autossuficiente) e, para o ExifTool, **o `exiftool.exe`
+junto da pasta `exiftool_files`** (o `exiftool.exe` sozinho é só um lançador e não
+roda sem essa pasta ao lado).
 
 **Completar metadados que faltaram (sem re-hashear):** se um disco foi varrido
 sem MediaInfo/ExifTool, não é preciso refazer a varredura (horas de hash). Use o
