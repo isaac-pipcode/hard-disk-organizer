@@ -114,6 +114,7 @@ def discos_disponiveis():
     achados = []
     if platform.system() == "Windows":
         import shutil
+        sysdrive = os.environ.get("SystemDrive", "C:").rstrip("\\").upper()
         for letra in string.ascii_uppercase:
             p = f"{letra}:\\"
             if not os.path.exists(p):
@@ -123,11 +124,15 @@ def discos_disponiveis():
                 total = shutil.disk_usage(p).total
             except Exception:
                 total = 0
+            eh_sistema = (f"{letra}:" == sysdrive)
             texto = f"{letra}:  {rotulo}".rstrip()
             if total:
                 texto += f"  ({_humano_tb(total)})"
+            if eh_sistema:
+                texto += "  — disco do sistema (evite varrer)"
             achados.append({"valor": p, "letra": f"{letra}:", "rotulo": rotulo,
-                            "tamanho": _humano_tb(total), "texto": texto})
+                            "tamanho": _humano_tb(total), "texto": texto,
+                            "sistema": eh_sistema})
     else:
         import shutil
         for base in ("/Volumes", f"/media/{os.environ.get('USER','')}", "/mnt"):
