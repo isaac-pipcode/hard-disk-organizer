@@ -75,6 +75,27 @@ EXT_VIDEO_AUDIO = {"mov", "mp4", "mxf", "avi", "mkv", "mts", "m2ts", "m4v", "mpg
 EXT_IMAGEM = {"jpg", "jpeg", "tif", "tiff", "png", "dpx", "cr2", "nef", "arw", "dng",
               "gif", "bmp", "psd", "heic", "webp"}
 
+# Pastas/arquivos de SISTEMA e lixo que nunca são acervo — pulados sempre, para
+# não perder tempo (Lixeira, metadados de volume) nem tropeçar em arquivos
+# bloqueados do Windows (pagefile/hiberfil). Nomes comparados em minúsculas.
+IGNORAR_PASTAS = {
+    "$recycle.bin", "system volume information", "$winreagent", "$sysreset",
+    "config.msi", "recovery", "found.000", "found.001", "lost+found",
+    ".trashes", ".spotlight-v100", ".fseventsd", "$getcurrent",
+}
+IGNORAR_ARQUIVOS = {
+    "pagefile.sys", "hiberfil.sys", "swapfile.sys",
+    "dumpstack.log", "dumpstack.log.tmp", "desktop.ini", "thumbs.db",
+}
+
+
+def _pular_dir(nome):
+    return nome.lower() in IGNORAR_PASTAS
+
+
+def _pular_arquivo(nome):
+    return nome.lower() in IGNORAR_ARQUIVOS
+
 
 def _norm(p):
     """Normaliza separadores de caminho (Windows/Unix) para casar os mapas."""
@@ -171,7 +192,8 @@ def mediainfo(caminho: Path):
 
 
 def exiftool(caminho: Path):
-    """Metadados embutidos (imagens/documentos) via ExifTool — complementa o MediaInfo."""
+    """Metadados embutidos (imagens) via ExifTool — chamada única (usada no backfill
+    de poucos arquivos). Na varredura em massa, use exiftool_lote (uma passada)."""
     exe = ferramenta("exiftool")
     if not exe:
         return None
@@ -182,6 +204,37 @@ def exiftool(caminho: Path):
         return data[0] if data else None
     except Exception:
         return None
+
+
+def exiftool_lote(raiz: Path):
+    """Roda o ExifTool UMA vez sobre a árvore, só nas extensões de imagem, e devolve
+    {caminho_relativo: metadados}. Evita o custo de subir o processo do ExifTool
+    (lançador Perl, ~0,2–0,5s cada) por imagem — o mesmo princípio do Siegfried em
+    lote. Em disco com muitas imagens, isso é a diferença entre horas e minutos."""
+    exe = ferramenta("exiftool")
+    if not exe:
+        return {}
+    args = [exe, "-json", "-q", "-r", "-fast2"]
+    for e in sorted(EXT_IMAGEM):
+        args += ["-ext", e]
+    args.append(str(raiz))
+    mapa = {}
+    try:
+        r = subprocess.run(args, capture_output=True, text=True,
+                           errors="replace")   # sem timeout: é uma passada única
+        data = json.loads(r.stdout) if r.stdout.strip() else []
+        for obj in data:
+            src = obj.get("SourceFile")
+            if not src:
+                continue
+            try:
+                rel = _norm(Path(src).relative_to(raiz))
+            except Exception:
+                rel = _norm(src)
+            mapa[rel] = obj
+    except Exception as e:
+        print(f"AVISO: ExifTool em lote falhou ({e}); imagens ficam sem metadados.")
+    return mapa
 
 
 def iso(ts):
@@ -199,8 +252,11 @@ def humano(n):
 def inspecionar(raiz: Path, mbps=120):
     """Dry-run: conta arquivos e bytes SEM calcular hash. Estima o tempo da varredura real."""
     n, total = 0, 0
-    for dirpath, _, files in os.walk(raiz):
+    for dirpath, dirs, files in os.walk(raiz):
+        dirs[:] = [d for d in dirs if not _pular_dir(d)]
         for nome in files:
+            if _pular_arquivo(nome):
+                continue
             p = Path(dirpath) / nome
             if p.is_symlink() or not p.is_file():
                 continue
@@ -270,8 +326,11 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
     total_arq, total_bytes = 0, 0
     if EMIT or CALLBACK is not None:
         _emit({"event": "phase", "fase": "contando"}, forcar=True)
-        for dirpath, _, files in os.walk(raiz):
+        for dirpath, dirs, files in os.walk(raiz):
+            dirs[:] = [d for d in dirs if not _pular_dir(d)]
             for nome in files:
+                if _pular_arquivo(nome):
+                    continue
                 p = Path(dirpath) / nome
                 try:
                     if p.is_symlink() or not p.is_file():
@@ -287,8 +346,10 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
               forcar=True)
 
     _emit({"event": "phase", "fase": "identificando"}, forcar=True)
-    print("Identificando formatos (Siegfried, uma passada na arvore)...", flush=True)
+    print("Identificando formatos (Siegfried) e metadados de imagem (ExifTool), "
+          "uma passada na arvore...", flush=True)
     mapa_puid = siegfried_lote(raiz)
+    mapa_exif = exiftool_lote(raiz)
 
     _emit({"event": "phase", "fase": "varrendo"}, forcar=True)
     lote, novos, lidos, bytes_lidos, erros = [], 0, 0, 0, 0
@@ -320,8 +381,11 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
             if not (anexar and csv_ja_tem_cabecalho):
                 w.writeheader()
 
-            for dirpath, _, files in os.walk(raiz):
+            for dirpath, dirs, files in os.walk(raiz):
+                dirs[:] = [d for d in dirs if not _pular_dir(d)]
                 for nome in files:
+                    if _pular_arquivo(nome):
+                        continue
                     caminho_abs = Path(dirpath) / nome
                     if caminho_abs.is_symlink() or not caminho_abs.is_file():
                         continue
@@ -351,11 +415,13 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
                         )
                         ext = caminho_abs.suffix.lower().lstrip(".")
                         puid, formato = mapa_puid.get(_norm(rel), (None, None))
-                        # MediaInfo so em AV; ExifTool so em imagem; resto: so hash + formato
+                        # MediaInfo so em AV (por arquivo, aceitavel: sao poucos e
+                        # grandes); imagens vêm do ExifTool em LOTE (mapa_exif),
+                        # sem subir um processo por imagem; resto: so hash + formato
                         if ext in EXT_VIDEO_AUDIO:
                             meta = mediainfo(caminho_abs)
                         elif ext in EXT_IMAGEM:
-                            meta = exiftool(caminho_abs)
+                            meta = mapa_exif.get(_norm(rel))
                         else:
                             meta = None
                     except Exception as e:
@@ -436,6 +502,9 @@ def backfill(disco_label, raiz: Path):
         sys.exit(msg)
 
     db.registrar_disco(disco_label)
+    _emit({"event": "phase", "fase": "identificando"}, forcar=True)
+    # Imagens: uma passada do ExifTool em LOTE (rápido); AV: MediaInfo por arquivo.
+    mapa_exif = exiftool_lote(raiz) if tem_et else {}
     _emit({"event": "phase", "fase": "completando"}, forcar=True)
     total = sum(1 for _ in open(manifesto_json, encoding="utf-8", errors="replace"))
     _emit({"event": "total", "total": total}, forcar=True)
@@ -464,7 +533,7 @@ def backfill(disco_label, raiz: Path):
                     if ext in EXT_VIDEO_AUDIO and tem_mi:
                         meta = mediainfo(alvo)
                     elif ext in EXT_IMAGEM and tem_et:
-                        meta = exiftool(alvo)
+                        meta = mapa_exif.get(_norm(r.get("caminho", "")))
                 except Exception:
                     meta = None
                 if meta is not None:
