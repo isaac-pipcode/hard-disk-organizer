@@ -72,6 +72,19 @@ def main():
     if base not in sys.path:
         sys.path.insert(0, base)
 
+    # Carrega DATABASE_URL (e afins) de um arquivo .env ao lado do programa, se
+    # existir — assim o operador conecta o Supabase colando a string num arquivo,
+    # sem mexer em variável de ambiente do Windows. Precisa rodar ANTES de importar
+    # o painel (o db.py lê DATABASE_URL na importação).
+    try:
+        from dotenv import load_dotenv
+        env_path = _base_dir() / ".env"
+        if env_path.exists():
+            load_dotenv(env_path)
+            print(f"  Configuração carregada de: {env_path.name}")
+    except Exception:
+        pass
+
     import uvicorn
     import panel
 

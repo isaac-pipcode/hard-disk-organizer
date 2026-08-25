@@ -46,6 +46,22 @@ pasta **`manifestos/`** criada **ao lado do `.exe`**.
 GitHub Actions (não é versionado no repositório). Veja
 [`packaging/README.md`](packaging/README.md) para baixá-lo ou gerar uma nova versão.
 
+## Conectar ao banco (Supabase) — opcional
+
+Por padrão o programa roda **offline** (dados só nos manifestos locais). Para
+enviar o inventário à nuvem e habilitar o dashboard, conecte um PostgreSQL/Supabase:
+
+1. Aplique o `sql/schema.sql` no **SQL Editor** do Supabase (cria tabelas + views,
+   inclusive a coluna `mediainfo`).
+2. Copie a **connection string** (*Project Settings → Database → Connection string*).
+   Prefira a aba **Session pooler** — funciona sem IPv6, evitando erro de conexão.
+3. Crie um arquivo **`.env`** ao lado do `PreservaScan.exe` (veja `.env.example`)
+   com `DATABASE_URL=...`. O programa lê o `.env` ao abrir — **sem mexer em variável
+   de ambiente**. O painel mostra "conectado ao banco" quando dá certo.
+
+Re-varreduras e o botão **"Completar metadados"** atualizam o banco por upsert
+(`ON CONFLICT (disco_label, caminho)`), inclusive o `mediainfo` — sem duplicar.
+
 ## Instalação na máquina da escola (na viagem)
 
 Pré-requisitos: Docker + Docker Compose. (No Windows, Docker Desktop com WSL2.)
