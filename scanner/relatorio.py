@@ -202,17 +202,22 @@ def escrever_dashboard(saida: Path, s):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PRESERVA-SCAN — Relatório do acervo</title>
 <style>
-  .viz-root{{ color-scheme:light;
-    --plane:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
-    --grid:#e1e0d9; --baseline:#c3c2b7; --border:rgba(11,11,11,.10);
-    --series-1:#2a78d6; --track:#eef1f4; }}
-  @media (prefers-color-scheme:dark){{ :root:where(:not([data-theme="light"])) .viz-root{{
-    color-scheme:dark; --plane:#0d0d0d; --surface:#1a1a19; --ink:#fff; --ink2:#c3c2b7;
-    --muted:#898781; --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,.10);
-    --series-1:#3987e5; --track:#242423; }} }}
+  /* Tokens no :root para que TODO o documento (inclusive body) herde as cores.
+     (bug anterior: variáveis ficavam num filho .viz-root e o body não as via —
+      texto ficava sem cor, ilegível no modo escuro do sistema.) */
+  :root{{ color-scheme:light;
+    --plane:#f4f4f2; --surface:#ffffff; --ink:#141414; --ink2:#4a4a48; --muted:#6b6b68;
+    --grid:#e3e2dc; --baseline:#c3c2b7; --border:rgba(0,0,0,.12);
+    --series-1:#2a6fd6; --track:#e9edf2; }}
+  @media (prefers-color-scheme:dark){{ :root{{
+    color-scheme:dark; --plane:#101012; --surface:#1c1c1f; --ink:#f2f2f2; --ink2:#cbcac4;
+    --muted:#9a9a94; --grid:#333336; --baseline:#3a3a3d; --border:rgba(255,255,255,.16);
+    --series-1:#5aa0f2; --track:#2a2a2e; }} }}
   *{{ box-sizing:border-box; }}
-  body{{ margin:0; background:var(--plane); color:var(--ink);
+  html,body{{ margin:0; background:var(--plane); color:var(--ink);
     font-family:system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.5; }}
+  h1,h2{{ color:var(--ink); }}
+  .tn{{ color:var(--ink); }}
   .viz-root{{ max-width:900px; margin:0 auto; padding:2rem 1.1rem 3rem; }}
   h1{{ font-size:1.5rem; margin:0 0 .15rem; }}
   .sub{{ color:var(--ink2); font-size:.92rem; margin:0 0 1.4rem; }}
