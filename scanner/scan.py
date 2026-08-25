@@ -549,6 +549,9 @@ def backfill(disco_label, raiz: Path):
                       mingap=1.0)
     db.enviar_lote(lote)
     os.replace(tmp, manifesto_json)
+    # Restaura o status do disco (registrar_disco o marcou 'varrendo' no inicio):
+    # o backfill so enriquece metadados, nao deixa o disco "varrendo" para sempre.
+    db.concluir_disco(disco_label)
     _emit({"event": "done", "lidos": lidos, "novos": feitos, "total": total,
            "online": db.conectado()}, forcar=True)
     print(f"\nOK — backfill '{disco_label}': {lidos} verificados, "
