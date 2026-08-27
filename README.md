@@ -144,7 +144,11 @@ Saída (na pasta `relatorio/`), tudo em formato aberto que a instituição guard
 
 - `dashboard.html` — painel visual **estático** (abre no navegador, offline): volume
   por disco, formatos mais frequentes, duplicatas e resumo.
-- `inventario_consolidado.csv` — todos os discos num arquivo só.
+- `inventario_consolidado.csv` — todos os discos num arquivo só, **com colunas
+  audiovisuais** (duração, resolução, codec de vídeo/áudio, bitrate) extraídas do
+  MediaInfo/ExifTool. O manifesto cru (`manifesto_<disco>.csv`) é uma tabela enxuta
+  e guarda esses metadados técnicos no `.jsonl` ao lado; é o relatório que os traz
+  para a planilha, sem precisar abrir o JSON nem re-varrer.
 - `duplicatas.csv` — arquivos idênticos (mesmo SHA-256) e **em quantos discos**
   aparecem (responde "está em 1 ou em 2+ discos", como a view `duplicidade` do banco).
 - `resumo.json` — números do acervo, para outras ferramentas.
