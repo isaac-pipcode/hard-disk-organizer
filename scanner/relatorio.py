@@ -29,6 +29,67 @@ from collections import Counter
 CAMPOS = ["disco_label", "caminho", "nome", "extensao", "tamanho_bytes",
           "mtime", "sha256", "puid", "formato"]
 
+# Colunas audiovisuais derivadas do MediaInfo/ExifTool (que ficam no .jsonl, não no
+# CSV cru da varredura). Aqui o relatório as EXTRAI para o CSV consolidado — para um
+# acervo audiovisual, ver duração/resolução/codec direto na planilha é essencial.
+CAMPOS_AV = ["duracao", "resolucao", "codec_video", "codec_audio", "bitrate"]
+CAMPOS_INV = CAMPOS + CAMPOS_AV
+
+
+def _hhmmss(segundos):
+    """Segundos (float/str) -> 'H:MM:SS'. Vazio se não der para converter."""
+    try:
+        s = int(float(segundos))
+    except (TypeError, ValueError):
+        return ""
+    return f"{s // 3600}:{(s % 3600) // 60:02d}:{s % 60:02d}"
+
+
+def _tracks(meta):
+    """Lista de tracks do MediaInfo (General/Video/Audio) ou [] se não for esse formato."""
+    if isinstance(meta, dict):
+        media = meta.get("media")
+        if isinstance(media, dict):
+            t = media.get("track")
+            if isinstance(t, list):
+                return t
+    return []
+
+
+def resumo_midia(r):
+    """Extrai campos audiovisuais legíveis do bloco `mediainfo` de uma linha do
+    manifesto. Cobre vídeo/áudio (MediaInfo) e imagem (ExifTool). Tudo tolerante a
+    ausência: um arquivo sem mídia devolve o dicionário com strings vazias."""
+    out = {c: "" for c in CAMPOS_AV}
+    meta = r.get("mediainfo")
+    if not isinstance(meta, dict):
+        return out
+    tracks = _tracks(meta)
+    if tracks:                                   # MediaInfo (áudio/vídeo)
+        geral = next((t for t in tracks if t.get("@type") == "General"), {})
+        video = next((t for t in tracks if t.get("@type") == "Video"), {})
+        audio = next((t for t in tracks if t.get("@type") == "Audio"), {})
+        out["duracao"] = _hhmmss(geral.get("Duration"))
+        if video.get("Width") and video.get("Height"):
+            out["resolucao"] = f"{video['Width']}x{video['Height']}"
+        if video.get("Format"):
+            perfil = video.get("Format_Profile")
+            out["codec_video"] = f"{video['Format']} {perfil}".strip() if perfil else video["Format"]
+        if audio.get("Format"):
+            canais = audio.get("Channels")
+            out["codec_audio"] = f"{audio['Format']} {canais}ch" if canais else audio["Format"]
+        taxa = geral.get("OverallBitRate")
+        if taxa:
+            try:
+                out["bitrate"] = f"{int(taxa) / 1_000_000:.1f} Mbps"
+            except (TypeError, ValueError):
+                pass
+    elif meta.get("ImageWidth") and meta.get("ImageHeight"):   # ExifTool (imagem)
+        out["resolucao"] = f"{meta['ImageWidth']}x{meta['ImageHeight']}"
+        if meta.get("FileType"):
+            out["codec_video"] = str(meta["FileType"])          # tipo da imagem
+    return out
+
 
 def humano(n):
     n = float(n or 0)
@@ -98,13 +159,15 @@ def escrever_csvs(manifest_dir: Path, saida: Path, a):
     dup = saida / "duplicatas.csv"
     with open(inv, "w", newline="", encoding="utf-8") as fi, \
          open(dup, "w", newline="", encoding="utf-8") as fd:
-        wi = csv.DictWriter(fi, fieldnames=CAMPOS); wi.writeheader()
+        wi = csv.DictWriter(fi, fieldnames=CAMPOS_INV); wi.writeheader()
         wd = csv.writer(fd)
         wd.writerow(["sha256", "copias", "em_n_discos", "tamanho_bytes",
                      "disco_label", "caminho"])
         for mf in _manifestos(manifest_dir):
             for r in _linhas(mf):
-                wi.writerow({k: r.get(k) for k in CAMPOS})
+                linha = {k: r.get(k) for k in CAMPOS}
+                linha.update(resumo_midia(r))
+                wi.writerow(linha)
                 sha = r.get("sha256")
                 info = porhash.get(sha) if sha else None
                 if info and info[0] > 1:      # só arquivos que têm cópia idêntica
