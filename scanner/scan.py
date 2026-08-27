@@ -151,6 +151,17 @@ def siegfried_lote(raiz: Path):
     if not sf:
         print("AVISO: 'sf' (Siegfried) nao encontrado; seguindo sem identificacao de formato.")
         return {}
+    # O Siegfried precisa do arquivo de assinaturas (default.sig). Numa instalacao
+    # nativa (Scoop/choco) ele fica em SIEGFRIED_HOME/AppData; quando o 'sf.exe' vem
+    # EMBUTIDO no .exe, empacotamos o 'default.sig' ao lado dele — entao apontamos
+    # SIEGFRIED_HOME para essa pasta. Sem isso, o sf embutido roda mas nao identifica
+    # nada (campo "formato" fica vazio). Se o .sig nao estiver junto, deixamos o sf
+    # usar o proprio HOME (instalacao nativa), preservando o funcionamento.
+    env = os.environ.copy()
+    if not env.get("SIEGFRIED_HOME"):
+        sig_local = Path(sf).parent / "default.sig"
+        if sig_local.exists():
+            env["SIEGFRIED_HOME"] = str(Path(sf).parent)
     mapa = {}
     try:
         import tempfile
@@ -158,7 +169,7 @@ def siegfried_lote(raiz: Path):
         os.close(fd)
         with open(tmp, "w", encoding="utf-8") as out:
             subprocess.run([sf, "-json", str(raiz)], stdout=out,
-                           stderr=subprocess.DEVNULL, check=False)
+                           stderr=subprocess.DEVNULL, check=False, env=env)
         with open(tmp, encoding="utf-8") as f:
             data = json.load(f)
         os.unlink(tmp)

@@ -33,12 +33,25 @@ jobs:
           pip install -r scanner/requirements.txt
           pip install pyinstaller==6.11.1
 
-      - name: Embutir MediaInfo + ExifTool (best-effort)
+      - name: Embutir Siegfried + MediaInfo + ExifTool (best-effort)
         continue-on-error: true      # se falhar, o .exe sai sem os binários (fallback: pasta/PATH)
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path packaging/ferramentas | Out-Null
-          choco install mediainfo-cli exiftool -y --no-progress
+          choco install siegfried mediainfo-cli exiftool -y --no-progress
+          # Siegfried: além do 'sf.exe', o scanner precisa do arquivo de assinaturas
+          # 'default.sig' AO LADO do binário (o scan aponta SIEGFRIED_HOME para a pasta
+          # das ferramentas quando encontra o .sig ali). 'sf -update' baixa o .sig para
+          # a pasta indicada por SIEGFRIED_HOME.
+          $sf = Get-ChildItem -Recurse -Path C:\ProgramData\chocolatey\lib\siegfried -Filter sf.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $sf) { $sfCmd = Get-Command sf.exe -ErrorAction SilentlyContinue; if ($sfCmd) { $sf = Get-Item $sfCmd.Source } }
+          if ($sf) {
+            Copy-Item $sf.FullName packaging/ferramentas/ ; Write-Host "Siegfried: $($sf.FullName)"
+            $env:SIEGFRIED_HOME = (Resolve-Path packaging/ferramentas).Path
+            & $sf.FullName -update
+            if (Test-Path "packaging/ferramentas/default.sig") { Write-Host "Assinaturas: default.sig baixado" }
+            else { Write-Host "AVISO: default.sig nao baixado (sf embutido roda sem identificar formato)" }
+          }
           # MediaInfo CLI é um .exe autossuficiente
           $mi = Get-ChildItem -Recurse -Path C:\ProgramData\chocolatey\lib\mediainfo-cli -Filter MediaInfo.exe -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($mi) { Copy-Item $mi.FullName packaging/ferramentas/ ; Write-Host "MediaInfo: $($mi.FullName)" }
