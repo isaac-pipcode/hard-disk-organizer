@@ -76,11 +76,15 @@ def main():
     # existir — assim o operador conecta o Supabase colando a string num arquivo,
     # sem mexer em variável de ambiente do Windows. Precisa rodar ANTES de importar
     # o painel (o db.py lê DATABASE_URL na importação).
+    # override=True: o .env ao lado do .exe é a FONTE DA VERDADE. Sem isso, uma
+    # variável de ambiente antiga (ex.: deixada por um 'setx DATABASE_URL ...' de
+    # um teste anterior) venceria o .env e o operador ficaria conectando na string
+    # velha sem entender por quê. Com override, o .env sempre manda.
     try:
         from dotenv import load_dotenv
         env_path = _base_dir() / ".env"
         if env_path.exists():
-            load_dotenv(env_path)
+            load_dotenv(env_path, override=True)
             print(f"  Configuração carregada de: {env_path.name}")
     except Exception:
         pass
