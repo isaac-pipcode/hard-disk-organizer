@@ -113,7 +113,11 @@ disponíveis.
 Para preencher a pasta `ferramentas/` à mão (sem instalar nada, sem PATH): coloque
 `MediaInfo.exe` (o CLI, autossuficiente) e, para o ExifTool, **o `exiftool.exe`
 junto da pasta `exiftool_files`** (o `exiftool.exe` sozinho é só um lançador e não
-roda sem essa pasta ao lado).
+roda sem essa pasta ao lado). Para o **Siegfried**, coloque `sf.exe` **junto do
+arquivo de assinaturas `default.sig`** (gere-o uma vez com `sf -update`); sem o
+`default.sig` ao lado, o `sf.exe` roda mas **não identifica formato** — por isso o
+painel pode mostrar "Siegfried: ausente" mesmo com o binário presente. O `.exe`
+gerado pela CI já vem com os três embutidos quando a build consegue baixá-los.
 
 **Completar metadados que faltaram (sem re-hashear):** se um disco foi varrido
 sem MediaInfo/ExifTool, não é preciso refazer a varredura (horas de hash). Use o
