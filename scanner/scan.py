@@ -195,8 +195,14 @@ def mediainfo(caminho: Path):
     if not exe:
         return None
     try:
+        # encoding/errors explícitos: sem isso, no Windows o Python decodifica a
+        # saída do MediaInfo com a página de código local (cp1252) e QUEBRA
+        # (UnicodeDecodeError) quando o JSON traz bytes UTF-8 — acentos, nomes de
+        # câmera, strings embutidas. O arquivo então fica SEM metadados. Forçar
+        # UTF-8 com errors="replace" resolve.
         r = subprocess.run([exe, "--Output=JSON", str(caminho)],
-                           capture_output=True, text=True, timeout=180)
+                           capture_output=True, encoding="utf-8", errors="replace",
+                           timeout=180)
         return json.loads(r.stdout) if r.stdout.strip() else None
     except Exception:
         return None
@@ -209,9 +215,12 @@ def exiftool(caminho: Path):
     if not exe:
         return None
     try:
+        # UTF-8 explícito (mesma razão do mediainfo): no Windows, text=True usaria
+        # cp1252 e quebraria a leitura em nomes/metadados acentuados.
         r = subprocess.run([exe, "-json", str(caminho)],
-                           capture_output=True, text=True, timeout=120)
-        data = json.loads(r.stdout)
+                           capture_output=True, encoding="utf-8", errors="replace",
+                           timeout=120)
+        data = json.loads(r.stdout) if r.stdout.strip() else None
         return data[0] if data else None
     except Exception:
         return None
@@ -231,8 +240,8 @@ def exiftool_lote(raiz: Path):
     args.append(str(raiz))
     mapa = {}
     try:
-        r = subprocess.run(args, capture_output=True, text=True,
-                           errors="replace")   # sem timeout: é uma passada única
+        r = subprocess.run(args, capture_output=True, encoding="utf-8",
+                           errors="replace")   # UTF-8 explícito; sem timeout: passada única
         data = json.loads(r.stdout) if r.stdout.strip() else []
         for obj in data:
             src = obj.get("SourceFile")
