@@ -8,6 +8,11 @@ name: Gerar PreservaScan.exe (Windows)
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Se preenchido (ex.: v0.2.0), publica uma Release com o .exe anexado"
+        required: false
+        default: ""
   push:
     tags:
       - "v*"
@@ -95,3 +100,16 @@ jobs:
           gh release create ${{ github.ref_name }} dist/PreservaScan.exe
           --title ${{ github.ref_name }}
           --notes "Build automático do painel PRESERVA-SCAN (executável independente para Windows)."
+
+      - name: Publicar Release (dispatch manual com release_tag)
+        # Permite publicar uma Release SEM precisar dar 'git push' de tag: basta
+        # rodar o workflow manualmente informando o campo release_tag (ex.: v0.2.0).
+        # O gh cria a tag apontando para este commit e anexa o .exe.
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag != '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh release create "${{ inputs.release_tag }}" dist/PreservaScan.exe
+          --target "${{ github.sha }}"
+          --title "${{ inputs.release_tag }}"
+          --notes "PRESERVA-SCAN ${{ inputs.release_tag }} — executável Windows independente (Siegfried + MediaInfo + ExifTool embutidos, retomada de varredura, relatório local com colunas audiovisuais, e conexão ao Supabase pelo próprio painel)."
