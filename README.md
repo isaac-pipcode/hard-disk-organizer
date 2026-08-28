@@ -53,11 +53,14 @@ enviar o inventário à nuvem e habilitar o dashboard, conecte um PostgreSQL/Sup
 
 1. Aplique o `sql/schema.sql` no **SQL Editor** do Supabase (cria tabelas + views,
    inclusive a coluna `mediainfo`).
-2. Copie a **connection string** (*Project Settings → Database → Connection string*).
-   Prefira a aba **Session pooler** — funciona sem IPv6, evitando erro de conexão.
-3. Crie um arquivo **`.env`** ao lado do `PreservaScan.exe` (veja `.env.example`)
-   com `DATABASE_URL=...`. O programa lê o `.env` ao abrir — **sem mexer em variável
-   de ambiente**. O painel mostra "conectado ao banco" quando dá certo.
+2. Copie a **connection string** pelo botão **Connect** (no topo do Supabase) →
+   aba **Session pooler** (funciona sem IPv6, evitando erro de conexão).
+3. **No próprio painel**, clique no selo **"modo offline — conectar banco"** (ou
+   abra `/config`), cole a string e clique em **Testar e conectar**. O programa
+   testa a conexão na hora e **guarda sozinho** (grava o `.env` ao lado do `.exe`) —
+   sem criar arquivo à mão nem mexer em variável de ambiente. O selo passa a
+   "conectado ao banco". Alternativa manual: criar o `.env` você mesmo (veja
+   `.env.example`).
 
 Re-varreduras e o botão **"Completar metadados"** atualizam o banco por upsert
 (`ON CONFLICT (disco_label, caminho)`), inclusive o `mediainfo` — sem duplicar.
