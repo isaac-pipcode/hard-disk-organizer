@@ -13,7 +13,7 @@
     h1{ font-size:1.4rem; margin:0 0 .2rem; }
     .subtitulo{ color:var(--cinza); font-size:.92rem; margin:0 0 1rem; }
     .pill{ display:inline-block; font-size:.78rem; padding:.15rem .6rem; border-radius:999px;
-           border:1px solid; vertical-align:middle; }
+           border:1px solid; vertical-align:middle; text-decoration:none; cursor:pointer; }
     .pill-off{ color:#8a5a00; border-color:#f0d79a; background:#fff7e6; }
     .pill-on{ color:var(--verde); border-color:#bfe4c7; background:var(--verdebg); }
     .escudo{ display:inline-flex; gap:.4rem; align-items:center; background:var(--verdebg);
@@ -62,8 +62,8 @@
 </head>
 <body>
   <h1>PRESERVA-SCAN
-    {% if online %}<span class="pill pill-on">conectado ao banco</span>
-    {% else %}<span class="pill pill-off">modo offline</span>{% endif %}
+    {% if online %}<a href="/config" class="pill pill-on" title="Configurar conexão com o banco">conectado ao banco</a>
+    {% else %}<a href="/config" class="pill pill-off" title="Conectar ao Supabase">modo offline — conectar banco</a>{% endif %}
   </h1>
   <p class="subtitulo">Inventário do acervo — leitura de discos, sem alterar nada.</p>
 

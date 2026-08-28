@@ -24,6 +24,54 @@ def _conn():
     return psycopg2.connect(DATABASE_URL)
 
 
+def _amigavel(erro):
+    """Traduz erros comuns do psycopg2 numa mensagem que o operador entende."""
+    e = (erro or "").lower()
+    if "could not translate host name" in e or "name or service not known" in e:
+        return ("Endereço do servidor não encontrado. Confira se copiou a string "
+                "inteira e se a senha não tem caracteres especiais (@ : / #) que "
+                "quebram o endereço — use uma senha só com letras e números.")
+    if "password authentication failed" in e:
+        return "Senha incorreta. Confira a senha do banco no Supabase."
+    if "tenant or user not found" in e:
+        return ("Usuário/projeto não encontrado — a string parece incompleta. "
+                "Copie a string do 'Session pooler' inteira (postgres.SEU-REF:SENHA@...).")
+    if "timeout" in e or "could not connect" in e or "connection refused" in e:
+        return ("Não foi possível conectar (sem internet, ou host/porta errados). "
+                "Confira a conexão e a string do Supabase.")
+    if "does not exist" in e and "database" in e:
+        return "Banco de dados não existe nessa string — confira o final (…/postgres)."
+    return f"Falha ao conectar: {erro}"
+
+
+def testar(url):
+    """Testa uma string de conexão sem alterar nada. Devolve (ok, mensagem)."""
+    if not psycopg2:
+        return False, "Esta versão do programa não tem suporte a banco (psycopg2 ausente)."
+    url = (url or "").strip()
+    if not url:
+        return False, "Cole a string de conexão do Supabase."
+    try:
+        c = psycopg2.connect(url, connect_timeout=8)
+        try:
+            with c.cursor() as cur:
+                cur.execute("SELECT 1")
+        finally:
+            c.close()
+        return True, ""
+    except Exception as e:
+        return False, _amigavel(str(e))
+
+
+def configurar(url):
+    """Passa a usar `url` como conexão AGORA (em memória), sem reiniciar o programa.
+    String vazia = volta ao modo offline. Devolve True se ficou conectado."""
+    global DATABASE_URL
+    DATABASE_URL = (url or "").strip() or None
+    os.environ["DATABASE_URL"] = DATABASE_URL or ""
+    return conectado()
+
+
 def registrar_disco(label, capacidade_tb=None, grupo=None):
     if not conectado():
         return

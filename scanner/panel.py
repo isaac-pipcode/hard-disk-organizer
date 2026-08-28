@@ -243,6 +243,104 @@ def home(request: Request):
     })
 
 
+def _salvar_env(url):
+    """Grava (ou remove) a linha DATABASE_URL no .env ao lado do programa, preservando
+    as outras linhas. Assim a conexão configurada pelo painel PERSISTE ao reabrir."""
+    env_path = _BASE_DADOS / ".env"
+    linhas = []
+    if env_path.exists():
+        try:
+            linhas = [l for l in env_path.read_text(encoding="utf-8").splitlines()
+                      if not l.strip().startswith("DATABASE_URL=")]
+        except Exception:
+            linhas = []
+    if url:
+        linhas.append(f"DATABASE_URL={url}")
+    corpo = "\n".join(l for l in linhas if l.strip())
+    env_path.write_text((corpo + "\n") if corpo else "", encoding="utf-8")
+    return env_path
+
+
+def _pagina_config(valor="", erro=None, ok=None):
+    """Tela de configuração do banco (Supabase) — o operador cola a string e conecta,
+    sem criar arquivo .env à mão."""
+    valor = html.escape(valor or "")
+    alerta = ""
+    if erro:
+        alerta = f'<div class="box err">⚠️ {html.escape(erro)}</div>'
+    elif ok:
+        alerta = f'<div class="box ok">✅ {html.escape(ok)}</div>'
+    return f"""<!doctype html><html lang="pt-br"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PRESERVA-SCAN — conectar ao banco</title>
+<style>
+  :root{{ --ink:#1a1a1a; --bg:#fff; --cinza:#666; --azul:#1857b8; --linha:#e3e3e3;
+          --okbg:#e7f6ec; --okln:#1c7a3f; --errbg:#fdecec; --errln:#b3261e; }}
+  @media (prefers-color-scheme:dark){{ :root{{ --ink:#ececec; --bg:#1b1b1d; --cinza:#a6a6a6;
+          --azul:#7aa7ff; --linha:#3a3a3d; --okbg:#12331f; --okln:#6ee7a0; --errbg:#3a1c1a; --errln:#ff8a80; }} }}
+  *{{ box-sizing:border-box; }}
+  body{{ font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg);
+         color:var(--ink); max-width:720px; margin:0 auto; padding:1.5rem 1.2rem; line-height:1.5; }}
+  h1{{ font-size:1.3rem; margin:.2rem 0 .3rem; }}
+  a{{ color:var(--azul); }}
+  label{{ display:block; font-weight:600; margin:1.1rem 0 .35rem; }}
+  textarea{{ width:100%; min-height:90px; font-family:ui-monospace,Consolas,monospace; font-size:.9rem;
+             padding:.6rem; border:1px solid var(--linha); border-radius:8px; background:var(--bg); color:var(--ink); }}
+  .btn{{ display:inline-block; margin-top:1rem; background:var(--azul); color:#fff; border:0; border-radius:8px;
+         padding:.7rem 1.3rem; font-size:1rem; font-weight:600; cursor:pointer; }}
+  .btn.sec{{ background:transparent; color:var(--azul); border:1px solid var(--azul); margin-left:.5rem; }}
+  .ajuda{{ color:var(--cinza); font-size:.9rem; }}
+  .passos{{ background:var(--okbg); border-radius:8px; padding:.8rem 1rem; font-size:.9rem; margin:1rem 0; }}
+  .box{{ border-radius:8px; padding:.7rem .9rem; margin:1rem 0; font-size:.92rem; }}
+  .box.err{{ background:var(--errbg); color:var(--errln); }}
+  .box.ok{{ background:var(--okbg); color:var(--okln); }}
+  code{{ background:rgba(128,128,128,.15); padding:.05rem .3rem; border-radius:4px; }}
+</style></head><body>
+  <p><a href="/">← voltar ao painel</a></p>
+  <h1>Conectar ao banco (Supabase)</h1>
+  <p class="ajuda">Cole aqui a string de conexão do seu projeto. O programa testa e
+     guarda sozinho — você <b>não</b> precisa criar arquivo nenhum.</p>
+  {alerta}
+  <div class="passos">
+    <b>Onde achar a string:</b> no Supabase, botão <b>Connect</b> (no topo) →
+    aba <b>Session pooler</b> → copie a string inteira. Troque <code>[YOUR-PASSWORD]</code>
+    pela senha do banco (de preferência só letras e números).
+  </div>
+  <form method="post" action="/config">
+    <label for="cs">String de conexão (DATABASE_URL)</label>
+    <textarea id="cs" name="connection_string" placeholder="postgresql://postgres.SEU-REF:SENHA@aws-0-...pooler.supabase.com:5432/postgres">{valor}</textarea>
+    <div>
+      <button class="btn" type="submit">Testar e conectar</button>
+      <button class="btn sec" type="submit" name="connection_string" value="">Desconectar (offline)</button>
+    </div>
+  </form>
+  <p class="ajuda" style="margin-top:1.4rem">🔒 A string fica guardada só nesta máquina
+     (arquivo <code>.env</code> ao lado do programa). Contém a senha do banco — trate
+     este computador como de confiança.</p>
+</body></html>"""
+
+
+@app.get("/config", response_class=HTMLResponse)
+def config_form(request: Request):
+    return HTMLResponse(_pagina_config(db.DATABASE_URL or ""))
+
+
+@app.post("/config")
+def config_salvar(connection_string: str = Form("")):
+    url = connection_string.strip()
+    if not url:
+        # Desconectar: volta ao modo offline e remove do .env.
+        db.configurar("")
+        _salvar_env("")
+        return RedirectResponse(url="/", status_code=303)
+    ok, msg = db.testar(url)
+    if not ok:
+        return HTMLResponse(_pagina_config(url, erro=msg), status_code=400)
+    db.configurar(url)
+    _salvar_env(url)
+    return RedirectResponse(url="/", status_code=303)
+
+
 @app.post("/varrer")
 def varrer(disco: str = Form(...), raiz: str = Form(...), subpasta: str = Form(""), grupo: str = Form("")):
     caminho = os.path.join(raiz, subpasta) if subpasta.strip() else raiz
