@@ -1,0 +1,25 @@
+name: Testes
+
+# Roda os testes a cada push e pull request. É rápido (Linux, sem dependências
+# externas): garante que o AGRUPAMENTO do relatório (totais por disco, dedup por
+# SHA-256, contagem de formatos e colunas audiovisuais) não regrida.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Rodar o teste de agrupamento do relatório
+        run: python tests/test_agrupamento_relatorio.py
