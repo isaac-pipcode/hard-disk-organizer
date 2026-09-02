@@ -29,6 +29,7 @@ import relatorio  # gera o relatório local (dashboard + planilhas) a partir dos
 import dedup      # planeja a deduplicação (fase 2) a partir dos manifestos
 import espelhamento  # planeja o espelhamento / compra de discos (fase 2)
 import consolidado   # visão entre discos: o que está repetido onde (fase 2)
+import executar       # execução guiada e segura da limpeza (fase 2)
 
 
 def _recurso(rel):
@@ -462,6 +463,89 @@ def gerar_consolidado(request: Request):
             _ctx(ativo="consolidado", resumo=None, pasta=str(CONSOLIDADO_DIR), erro=f"{type(e).__name__}: {e}"))
     return templates.TemplateResponse(request, "consolidado.html",
         _ctx(ativo="consolidado", resumo=resumo, pasta=str(CONSOLIDADO_DIR)))
+
+
+EXEC_DIR = MANIFEST_DIR / "execucao"
+
+
+def _plano_dedup():
+    return DEDUP_DIR / "plano_dedup.csv"
+
+
+def _labels_do_plano():
+    """Rótulos de disco citados no plano (remover + manter), para o operador mapear."""
+    p = _plano_dedup()
+    if not p.exists():
+        return []
+    import csv as _csv
+    labels = set()
+    with open(p, encoding="utf-8") as f:
+        for r in _csv.DictReader(f):
+            if r.get("disco_label"):
+                labels.add(r["disco_label"])
+            if r.get("manter_disco"):
+                labels.add(r["manter_disco"])
+    return sorted(labels)
+
+
+def _ctx_exec(**extra):
+    base = dict(ativo="execucao", plano_existe=_plano_dedup().exists(),
+                labels=_labels_do_plano(), drives=discos_disponiveis(),
+                pasta=str(EXEC_DIR), verif=None, montados_json="{}",
+                resultado=None, restaurado=None)
+    base.update(extra)
+    return _ctx(**base)
+
+
+def _montados_do_form(form):
+    montados = {}
+    for lbl in _labels_do_plano():
+        v = (form.get("map::" + lbl) or "").strip()
+        if v:
+            montados[lbl] = v
+    return montados
+
+
+@app.get("/passo/execucao", response_class=HTMLResponse)
+def passo_execucao(request: Request):
+    return templates.TemplateResponse(request, "execucao.html", _ctx_exec())
+
+
+@app.post("/execucao/verificar", response_class=HTMLResponse)
+async def execucao_verificar(request: Request):
+    form = await request.form()
+    montados = _montados_do_form(form)
+    resumo = executar.verificar(_plano_dedup(), montados, EXEC_DIR)
+    resumo.pop("_resultados", None)
+    import json as _json
+    return templates.TemplateResponse(request, "execucao.html",
+        _ctx_exec(verif=resumo, montados_json=_json.dumps(montados)))
+
+
+@app.post("/execucao/executar", response_class=HTMLResponse)
+async def execucao_executar(request: Request):
+    import json as _json
+    form = await request.form()
+    montados = _json.loads(form.get("montados") or "{}")
+    if form.get("confirmo") != "sim":
+        # sem confirmação: reapresenta a simulação
+        resumo = executar.verificar(_plano_dedup(), montados, EXEC_DIR)
+        resumo.pop("_resultados", None)
+        return templates.TemplateResponse(request, "execucao.html",
+            _ctx_exec(verif=resumo, montados_json=_json.dumps(montados)))
+    res = executar.executar(_plano_dedup(), montados, EXEC_DIR, confirmar=True)
+    return templates.TemplateResponse(request, "execucao.html",
+        _ctx_exec(resultado=res, montados_json=_json.dumps(montados)))
+
+
+@app.post("/execucao/restaurar", response_class=HTMLResponse)
+async def execucao_restaurar(request: Request):
+    import json as _json
+    form = await request.form()
+    montados = _json.loads(form.get("montados") or "{}")
+    res = executar.restaurar(montados)
+    return templates.TemplateResponse(request, "execucao.html",
+        _ctx_exec(restaurado=res, montados_json=_json.dumps(montados)))
 
 
 @app.get("/log", response_class=PlainTextResponse)

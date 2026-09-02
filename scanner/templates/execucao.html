@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block titulo %}Executar limpeza — PRESERVA-SCAN{% endblock %}
+{% block conteudo %}
+  <h1>Executar limpeza</h1>
+  <p class="lede">Aplica o plano de deduplicação <b>com segurança</b>: as cópias redundantes vão para uma
+     <b>quarentena</b> no próprio disco (reversível) — nada é apagado de vez. Antes de mover cada arquivo,
+     o sistema <b>re-confere o hash da cópia que fica</b>. Se o keeper não existir ou não bater, ele pula.</p>
+
+  {% if not plano_existe %}
+  <div class="aviso a-rod">Gere primeiro o <b>plano de deduplicação</b> (Etapa 2 · Deduplicação). Ele é a base desta limpeza.</div>
+  {% else %}
+
+  {% if resultado %}
+  <div class="aviso a-ok">✅ Movidos para a quarentena: <b>{{ resultado.movidos_para_quarentena }}</b> arquivo(s)
+    ({{ humano(resultado.bytes_movidos) }}). Falhas: {{ resultado.falhas }}.</div>
+  <div class="card">
+    Os arquivos foram para a pasta <code>_QUARENTENA_PRESERVASCAN</code> em cada disco. Confira o acervo e,
+    quando tiver certeza, <b>esvazie essa pasta</b> pelo Explorer para liberar o espaço de vez.
+    Precisa desfazer? Use “Restaurar da quarentena” abaixo.
+  </div>
+  {% elif restaurado %}
+  <div class="aviso a-ok">↩️ Restaurados da quarentena: <b>{{ restaurado.restaurados }}</b> arquivo(s). Falhas: {{ restaurado.falhas }}.</div>
+  {% endif %}
+
+  <div class="card">
+    <h2 style="margin-top:0">1. Diga onde cada disco está montado</h2>
+    <p class="ajuda">Para cada disco do plano, escolha a letra em que ele está ligado agora. Discos não mapeados são pulados com segurança.</p>
+    <form action="/execucao/verificar" method="post">
+      {% for lbl in labels %}
+      <div class="campo">
+        <label>{{ lbl }}</label>
+        <select name="map::{{ lbl }}">
+          <option value="">— não montado / pular —</option>
+          {% for d in drives %}<option value="{{ d.valor }}">{{ d.texto }}</option>{% endfor %}
+        </select>
+      </div>
+      {% endfor %}
+      <div class="btn-row"><button class="btn" type="submit">🔎 Simular (verificar, sem mover nada)</button></div>
+    </form>
+  </div>
+
+  {% if verif %}
+  <h2>2. Resultado da simulação</h2>
+  <div class="cards-num">
+    <div class="kpi"><div class="n">{{ verif.ok_remover }}</div><small>seguros para mover · {{ humano(verif.bytes_a_liberar) }}</small></div>
+    <div class="kpi"><div class="n">{{ verif.total_no_plano }}</div><small>linhas no plano</small></div>
+  </div>
+  <div class="card pad0"><table>
+    <tr><th>Situação</th><th>Arquivos</th><th>O que significa</th></tr>
+    {% set rot = {
+      'ok_remover':'✅ cópia idêntica confirmada — seguro mover',
+      'keeper_ausente':'⚠️ a cópia que ficaria sumiu — NÃO mexe',
+      'keeper_hash_diferente':'⚠️ a cópia que fica não confere — NÃO mexe',
+      'keeper_disco_nao_montado':'disco da cópia que fica não está montado — pulado',
+      'removivel_mudou':'o arquivo mudou desde o plano — NÃO mexe',
+      'ja_ausente':'já não está lá — nada a fazer',
+      'e_o_proprio_keeper':'é a própria cópia que fica — ignorado',
+      'disco_nao_montado':'disco não mapeado — pulado',
+      'removivel_ilegivel':'não foi possível ler — pulado',
+      'keeper_ilegivel':'não foi possível ler a cópia que fica — pulado' } %}
+    {% for status, n in verif.por_status.items() %}
+    <tr><td>{{ status }}</td><td>{{ n }}</td><td class="muted">{{ rot.get(status, '') }}</td></tr>
+    {% endfor %}
+  </table></div>
+  <p class="ajuda">Detalhe linha a linha em <code>{{ pasta }}\verificacao.csv</code>.</p>
+
+  {% if verif.ok_remover and verif.ok_remover > 0 %}
+  <div class="card" style="border:1px solid var(--err)">
+    <h2 style="margin-top:0">3. Mover para a quarentena</h2>
+    <p>Isto vai <b>mover {{ verif.ok_remover }} arquivo(s)</b> ({{ humano(verif.bytes_a_liberar) }}) para a pasta
+       de quarentena. É <b>reversível</b> (dá para restaurar), mas mexe nos discos. Confirme:</p>
+    <form action="/execucao/executar" method="post">
+      <input type="hidden" name="montados" value='{{ montados_json }}'>
+      <label style="font-weight:400"><input type="checkbox" name="confirmo" value="sim" style="width:auto"> Entendo que {{ verif.ok_remover }} arquivo(s) serão movidos para a quarentena.</label>
+      <div class="btn-row"><button class="btn" type="submit" style="background:var(--err)">🧯 Mover para a quarentena</button></div>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h2 style="margin-top:0">Desfazer</h2>
+    <p class="ajuda">Devolve tudo da quarentena para o lugar original (nos discos mapeados acima).</p>
+    <form action="/execucao/restaurar" method="post">
+      <input type="hidden" name="montados" value='{{ montados_json }}'>
+      <div class="btn-row"><button class="btn ghost" type="submit">↩️ Restaurar da quarentena</button></div>
+    </form>
+  </div>
+  {% endif %}
+
+  {% endif %}
+{% endblock %}
