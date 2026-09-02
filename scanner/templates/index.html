@@ -58,6 +58,11 @@
     th{ color:var(--cinza); font-weight:600; font-size:.8rem; text-transform:uppercase; letter-spacing:.02em; }
     .rodape{ margin-top:1.4rem; font-size:.83rem; color:var(--cinza); }
     .rodape a{ color:var(--azul); }
+    .etapa{ margin:1.8rem 0 .3rem; padding:.5rem .8rem; border-radius:8px;
+            background:#eef2fb; color:#1857b8; font-weight:700; font-size:1rem;
+            border:1px solid #d6e0f5; }
+    .etapa small{ display:block; font-weight:400; font-size:.82rem; color:var(--cinza); margin-top:.15rem; }
+    @media (prefers-color-scheme:dark){ .etapa{ background:#1a2540; color:#9dbcff; border-color:#26355c; } }
   </style>
 </head>
 <body>
@@ -79,6 +84,10 @@
   <div class="aviso a-err">⚠️ A última varredura{% if job_disco %} de <b>{{ job_disco }}</b>{% endif %} terminou com erro.
     <a href="/acompanhar">Ver o que aconteceu →</a></div>
   {% endif %}
+
+  <div class="etapa">🔍 Etapa 1 · Varredura
+    <small>Ler os discos e gerar o inventário (manifestos). É a única etapa que precisa do HD ligado.</small>
+  </div>
 
   <div class="passos"><span><b>1.</b> Ligue o HD</span> · <span><b>2.</b> Escolha abaixo</span> · <span><b>3.</b> Iniciar</span></div>
 
@@ -139,6 +148,10 @@
     <button type="submit" class="secund" formaction="/backfill" title="Completa só os metadados de áudio/vídeo/imagem que faltaram, sem re-varrer o disco">＋ Completar metadados de mídia (sem re-varrer)</button>
     {% endif %}
   </form>
+
+  <div class="etapa">📦 Etapa 2 · Análise e planejamento
+    <small>A partir dos manifestos já gerados — <b>não precisa varrer de novo</b>, nem estar com os HDs ligados. Rode quando quiser.</small>
+  </div>
 
   <h2>Relatório do acervo</h2>
   {% if tem_manifestos %}
