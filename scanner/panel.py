@@ -27,6 +27,7 @@ import db
 import scan       # a varredura roda no MESMO processo (essencial para o .exe empacotado)
 import relatorio  # gera o relatório local (dashboard + planilhas) a partir dos manifestos
 import dedup      # planeja a deduplicação (fase 2) a partir dos manifestos
+import espelhamento  # planeja o espelhamento / compra de discos (fase 2)
 
 
 def _recurso(rel):
@@ -510,6 +511,74 @@ def _pagina_dedup(r):
   </div>
   <p style="color:var(--cinza);font-size:.9rem">Recomendação: revise o <code>plano_dedup.csv</code>
      antes de remover qualquer coisa. A remoção é um passo manual e conferido.</p>
+</body></html>"""
+
+
+ESPELHO_DIR = MANIFEST_DIR / "espelhamento"
+
+
+@app.post("/espelhamento")
+def gerar_espelhamento():
+    """Gera o plano de espelhamento (quantos discos comprar). Não copia nada."""
+    try:
+        resumo = espelhamento.planejar(MANIFEST_DIR, ESPELHO_DIR)
+    except FileNotFoundError as e:
+        return HTMLResponse(f"<p>{html.escape(str(e))} <a href='/'>voltar</a></p>", status_code=400)
+    except Exception as e:
+        return HTMLResponse(
+            f"<p>Falha ao gerar o plano de espelhamento: {html.escape(type(e).__name__)}: "
+            f"{html.escape(str(e))} <a href='/'>voltar</a></p>", status_code=500)
+    return HTMLResponse(_pagina_espelho(resumo))
+
+
+def _pagina_espelho(r):
+    rec = r.get("recomendacao", {})
+    uni = r.get("conteudo_unico", {})
+    pasta = html.escape(str(ESPELHO_DIR))
+    linhas = ""
+    for t in r.get("opcoes_por_capacidade", []):
+        destaque = ' style="font-weight:700;background:var(--okbg)"' if t.get("capacidade_tb") == rec.get("capacidade_tb") else ""
+        linhas += (f"<tr{destaque}><td>{t['capacidade_tb']} TB</td><td>{t['discos_primarios']}</td>"
+                   f"<td>{t['discos_total']}</td><td>{t['capacidade_total_tb']} TB</td>"
+                   f"<td>{t['uso_medio']*100:.0f}%</td></tr>")
+    return f"""<!doctype html><html lang="pt-br"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PRESERVA-SCAN — plano de espelhamento</title>
+<style>
+  :root{{ --ink:#1a1a1a; --bg:#fff; --cinza:#666; --azul:#1857b8; --linha:#e3e3e3; --okbg:#e7f6ec; --okln:#1c7a3f; }}
+  @media (prefers-color-scheme:dark){{ :root{{ --ink:#ececec; --bg:#1b1b1d; --cinza:#a6a6a6; --azul:#7aa7ff; --linha:#3a3a3d; --okbg:#12331f; --okln:#6ee7a0; }} }}
+  body{{ font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); max-width:760px; margin:0 auto; padding:1.5rem 1.2rem; line-height:1.5; }}
+  a{{ color:var(--azul); }} h1{{ font-size:1.3rem; margin:.2rem 0 .6rem; }}
+  .num{{ font-size:1.8rem; font-weight:700; }}
+  .card{{ border:1px solid var(--linha); border-radius:10px; padding:.9rem 1rem; margin:1rem 0; }}
+  table{{ width:100%; border-collapse:collapse; font-size:.92rem; }}
+  th,td{{ text-align:left; padding:.4rem .55rem; border-bottom:1px solid var(--linha); }}
+  th{{ color:var(--cinza); font-size:.8rem; text-transform:uppercase; }}
+  .box{{ border-radius:10px; padding:.8rem 1rem; margin:1rem 0; background:var(--okbg); color:var(--okln); }}
+  code{{ background:rgba(128,128,128,.15); padding:.05rem .3rem; border-radius:4px; word-break:break-all; }}
+</style></head><body>
+  <p><a href="/">← voltar ao painel</a></p>
+  <h1>Plano de espelhamento (compra de discos)</h1>
+  <p style="color:var(--cinza)">Para guardar todo o acervo com <b>2 cópias em 2 discos</b>,
+     gastando o mínimo. Baseado no conteúdo único (já sem duplicatas).</p>
+  <div class="card">
+    <div class="num">{html.escape(rec.get('capacidade_tb') and f"{rec['discos_total']} discos de {rec['capacidade_tb']} TB" or '—')}</div>
+    <small style="color:var(--cinza)">recomendado — {rec.get('discos_primarios','?')} primário(s) + {rec.get('discos_espelho','?')} espelho(s),
+      uso médio {rec.get('uso_medio',0)*100:.0f}% · {uni.get('volume_humano','?')} únicos → {html.escape(r.get('volume_espelhado_humano','?'))} espelhados</small>
+  </div>
+  <table>
+    <tr><th>Disco</th><th>Primários</th><th>Total (c/ espelho)</th><th>TB comprados</th><th>Uso</th></tr>
+    {linhas}
+  </table>
+  <div class="box">
+    <b>Arquivos gerados</b> (na pasta ao lado dos manifestos):<br>
+    <code>{pasta}</code><br>
+    • <b>plano_espelhamento.csv</b> — cada conteúdo e em qual disco primário/espelho fica.<br>
+    • <b>plano_espelhamento_resumo.json</b> — os números acima.
+  </div>
+  <p style="color:var(--cinza);font-size:.9rem">Quanto mais discos varridos juntos, melhor o plano
+     (duplicatas entre discos deixam de contar duas vezes). Para economizar, discos existentes
+     saudáveis podem virar espelho depois de consolidados e conferidos.</p>
 </body></html>"""
 
 
