@@ -11,6 +11,7 @@ import os
 import sys
 import time
 import socket
+import subprocess
 import threading
 import webbrowser
 from pathlib import Path
@@ -57,8 +58,40 @@ def _salvar_endereco(url):
         return None
 
 
-def _abrir_navegador(url):
+def _achar_navegador_app():
+    """Procura o Edge ou o Chrome para abrir em MODO APP (janela sem abas nem barra
+    de endereço — parece um programa, não um navegador). Devolve o caminho ou None."""
+    import shutil
+    candidatos = [
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    ]
+    for c in candidatos:
+        if os.path.exists(c):
+            return c
+    for nome in ("msedge", "chrome", "chromium"):
+        p = shutil.which(nome)
+        if p:
+            return p
+    return None
+
+
+def _abrir_janela(url):
+    """Abre o painel numa JANELA DE APLICATIVO (sem abas/URL). Se não achar Edge/Chrome,
+    cai para o navegador padrão — o programa continua funcionando igual."""
     time.sleep(1.5)                                # da tempo do servidor subir
+    exe = _achar_navegador_app()
+    if exe:
+        try:
+            perfil = _base_dir() / ".preservascan_app"   # perfil próprio: janela isolada
+            subprocess.Popen([exe, f"--app={url}",
+                              f"--user-data-dir={perfil}",
+                              "--window-size=1200,840", "--no-first-run"])
+            return
+        except Exception:
+            pass
     try:
         webbrowser.open(url)
     except Exception:
@@ -99,17 +132,16 @@ def main():
     print("=" * 60)
     print("  PRESERVA-SCAN — painel de varredura (somente leitura)")
     print("")
-    print(f"  >>> ABRA ESTE ENDERECO NO NAVEGADOR:  {url}")
-    print("")
-    print("  (o navegador deve abrir sozinho; se abrir a pagina errada,")
-    print("   use EXATAMENTE o endereco acima)")
+    print("  A JANELA DO PROGRAMA deve abrir sozinha (sem barra de navegador).")
+    print(f"  Se nao abrir, use este endereco no navegador:  {url}")
     if arq:
-        print(f"  O endereco tambem foi salvo em: {arq.name} (ao lado do programa)")
-    print("  Esta janela pode ficar minimizada.")
-    print("  Para ENCERRAR o painel, feche esta janela.")
+        print(f"  O endereco tambem esta salvo em: {arq.name} (ao lado do programa)")
+    print("")
+    print("  Esta janela preta pode ficar minimizada.")
+    print("  Para ENCERRAR o painel, feche esta janela preta.")
     print("=" * 60, flush=True)
 
-    threading.Thread(target=_abrir_navegador, args=(url,), daemon=True).start()
+    threading.Thread(target=_abrir_janela, args=(url,), daemon=True).start()
     uvicorn.run(panel.app, host=HOST, port=porta, log_level="warning")
 
 

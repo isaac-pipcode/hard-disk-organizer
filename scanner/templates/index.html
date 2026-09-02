@@ -1,81 +1,13 @@
-<!doctype html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PRESERVA-SCAN — Operação</title>
-  <style>
-    :root{ --azul:#2b4a6f; --azul2:#3a6ea5; --tinta:#1e1e1e; --cinza:#6b6b6b;
-           --papel:#f7f5f0; --linha:#e6e2d9; --verde:#1e5b32; --verdebg:#e9f6ec; }
-    *{ box-sizing:border-box; }
-    body{ font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:var(--tinta);
-          max-width:760px; margin:2rem auto; padding:0 1rem; line-height:1.5; }
-    h1{ font-size:1.4rem; margin:0 0 .2rem; }
-    .subtitulo{ color:var(--cinza); font-size:.92rem; margin:0 0 1rem; }
-    .pill{ display:inline-block; font-size:.78rem; padding:.15rem .6rem; border-radius:999px;
-           border:1px solid; vertical-align:middle; text-decoration:none; cursor:pointer; }
-    .pill-off{ color:#8a5a00; border-color:#f0d79a; background:#fff7e6; }
-    .pill-on{ color:var(--verde); border-color:#bfe4c7; background:var(--verdebg); }
-    .escudo{ display:inline-flex; gap:.4rem; align-items:center; background:var(--verdebg);
-             border:1px solid #bfe4c7; color:var(--verde); font-size:.82rem; font-weight:600;
-             padding:.35rem .7rem; border-radius:8px; margin:.2rem 0 1rem; }
-    .passos{ display:flex; gap:.4rem; flex-wrap:wrap; font-size:.83rem; color:var(--cinza);
-             margin-bottom:1rem; }
-    .passos b{ color:var(--azul); }
-    form{ background:var(--papel); border:1px solid var(--linha); padding:1.2rem 1.3rem;
-          border-radius:12px; }
-    .campo{ margin:0 0 1.1rem; }
-    .campo:last-of-type{ margin-bottom:0; }
-    label{ display:block; font-weight:600; font-size:.92rem; margin-bottom:.15rem; }
-    .ajuda{ display:block; color:var(--cinza); font-size:.8rem; margin-bottom:.4rem; }
-    select,input{ width:100%; padding:.6rem .65rem; border:1px solid #cbc7bd; border-radius:8px;
-                  font-size:.95rem; background:#fff; }
-    select:focus,input:focus{ outline:2px solid var(--azul2); border-color:var(--azul2); }
-    .obrig{ color:#a15; font-weight:700; }
-    .opc{ color:var(--cinza); font-weight:400; font-size:.8rem; }
-    details.avancado{ margin-top:.3rem; }
-    details.avancado summary{ cursor:pointer; color:var(--azul); font-size:.86rem; font-weight:600; }
-    details.avancado .campo{ margin-top:.8rem; }
-    button{ margin-top:1.2rem; width:100%; padding:.75rem 1rem; border:0; border-radius:9px;
-            background:var(--azul); color:#fff; font-size:1rem; font-weight:600; cursor:pointer; }
-    button:hover{ background:#24405f; }
-    button:disabled{ background:#9aa6b3; cursor:not-allowed; }
-    .aviso{ padding:.7rem 1rem; border-radius:9px; margin:1rem 0; font-size:.92rem; }
-    .a-rod{ background:#eaf1fb; border:1px solid #b9d0f0; color:#20456f; }
-    .a-ok{ background:var(--verdebg); border:1px solid #bfe4c7; color:var(--verde); }
-    .a-err{ background:#fdecec; border:1px solid #f2bcbc; color:#8a1f1f; }
-    .aviso a{ color:inherit; font-weight:700; }
-    .semdisco{ color:#8a5a00; font-size:.85rem; margin-top:.3rem; }
-    .ferramentas{ margin:.2rem 0 1.1rem; font-size:.82rem; color:var(--cinza); }
-    .fbadge{ display:inline-block; border:1px solid; border-radius:999px; padding:.05rem .5rem; margin:0 .25rem .25rem 0; font-size:.76rem; }
-    .fbadge.ok{ color:var(--verde); border-color:#bfe4c7; background:#e9f6ec; }
-    .fbadge.no{ color:#8a5a00; border-color:#f0d79a; background:#fff7e6; }
-    button.secund{ background:#6b5636; }
-    button.secund:hover{ background:#574529; }
-    h2{ font-size:1.05rem; margin:1.6rem 0 .4rem; }
-    table{ width:100%; border-collapse:collapse; font-size:.9rem; }
-    th,td{ text-align:left; padding:.45rem .6rem; border-bottom:1px solid #eee; }
-    th{ color:var(--cinza); font-weight:600; font-size:.8rem; text-transform:uppercase; letter-spacing:.02em; }
-    .rodape{ margin-top:1.4rem; font-size:.83rem; color:var(--cinza); }
-    .rodape a{ color:var(--azul); }
-    .etapa{ margin:1.8rem 0 .3rem; padding:.5rem .8rem; border-radius:8px;
-            background:#eef2fb; color:#1857b8; font-weight:700; font-size:1rem;
-            border:1px solid #d6e0f5; }
-    .etapa small{ display:block; font-weight:400; font-size:.82rem; color:var(--cinza); margin-top:.15rem; }
-    @media (prefers-color-scheme:dark){ .etapa{ background:#1a2540; color:#9dbcff; border-color:#26355c; } }
-  </style>
-</head>
-<body>
-  <h1>PRESERVA-SCAN
-    {% if online %}<a href="/config" class="pill pill-on" title="Configurar conexão com o banco">conectado ao banco</a>
-    {% else %}<a href="/config" class="pill pill-off" title="Conectar ao Supabase">modo offline — conectar banco</a>{% endif %}
-  </h1>
-  <p class="subtitulo">Inventário do acervo — leitura de discos, sem alterar nada.</p>
+{% extends "base.html" %}
+{% block titulo %}Varredura — PRESERVA-SCAN{% endblock %}
+{% block conteudo %}
+  <div class="titulo-linha"><h1>Varredura</h1></div>
+  <p class="lede">Ler um disco e gerar o inventário (manifesto). É a única etapa que precisa do HD ligado.</p>
 
   <div class="escudo">🔒 Somente leitura — o programa nunca move, copia ou apaga arquivos do disco.</div>
 
   {% if rodando %}
-  <div class="aviso a-rod">⏳ Há uma varredura em andamento{% if job_disco %} — <b>{{ job_disco }}</b>{% endif %}.
+  <div class="aviso a-rod">⏳ Há uma operação em andamento{% if job_disco %} — <b>{{ job_disco }}</b>{% endif %}.
     <a href="/acompanhar">Acompanhar o progresso →</a></div>
   {% elif job_estado == 'concluido' %}
   <div class="aviso a-ok">✅ Última varredura{% if job_disco %} de <b>{{ job_disco }}</b>{% endif %} concluída.
@@ -85,137 +17,91 @@
     <a href="/acompanhar">Ver o que aconteceu →</a></div>
   {% endif %}
 
-  <div class="etapa">🔍 Etapa 1 · Varredura
-    <small>Ler os discos e gerar o inventário (manifestos). É a única etapa que precisa do HD ligado.</small>
-  </div>
-
-  <div class="passos"><span><b>1.</b> Ligue o HD</span> · <span><b>2.</b> Escolha abaixo</span> · <span><b>3.</b> Iniciar</span></div>
-
-  <form action="/varrer" method="post">
-    <div class="campo">
-      <label for="raiz">Qual disco varrer? <span class="obrig">*</span></label>
-      <span class="ajuda">Ligue o HD antes de abrir esta tela. Não apareceu? <a href="/" onclick="location.reload();return false;">atualizar lista</a>.</span>
-      <select id="raiz" name="raiz" required>
-        {% for d in discos %}
-        <option value="{{ d.valor }}" data-rotulo="{{ d.rotulo }}">{{ d.texto }}</option>
-        {% else %}
-        <option value="" disabled selected>Nenhum disco detectado — ligue um HD e atualize</option>
-        {% endfor %}
-      </select>
-      {% if not discos %}<div class="semdisco">Conecte o HD por USB e clique em “atualizar lista”.</div>{% endif %}
-    </div>
-
-    <div class="campo">
-      <label for="disco">Nome deste HD no catálogo <span class="obrig">*</span></label>
-      <span class="ajuda">É o apelido que identifica este disco no inventário. Já sugerimos o nome do volume — pode manter ou ajustar (ex.: <i>TRANSPORTE A</i>, <i>Antigos-C</i>).</span>
-      <input id="disco" name="disco" required placeholder="ex.: TRANSPORTE A">
-    </div>
-
-    <div class="campo">
-      <label for="grupo">Grupo do disco <span class="opc">(opcional)</span></label>
-      <span class="ajuda">Ajuda a organizar os HDs por finalidade. Na dúvida, deixe “não classificar”.</span>
-      <select id="grupo" name="grupo">
-        <option value="">— não classificar —</option>
-        <option value="antigos">Antigos (acervo histórico / arquivo morto)</option>
-        <option value="uso_continuo">Uso contínuo (material em uso no dia a dia)</option>
-        <option value="transporte">Transporte (HD usado para mover arquivos)</option>
-      </select>
-    </div>
-
-    <details class="avancado">
-      <summary>Opções avançadas</summary>
+  <div class="card">
+    <form action="/varrer" method="post">
       <div class="campo">
-        <label for="subpasta">Varrer só uma subpasta <span class="opc">(opcional)</span></label>
-        <span class="ajuda">Deixe <b>vazio</b> para varrer o disco inteiro (o normal). Preencha só se quiser limitar a uma pasta específica dentro do disco — ex.: <i>INVENTARIO</i>.</span>
-        <input id="subpasta" name="subpasta" placeholder="(vazio = disco inteiro)">
+        <label for="raiz">Qual disco varrer? <span class="obrig">*</span></label>
+        <span class="ajuda">Ligue o HD antes de abrir esta tela. Não apareceu? <a href="/" onclick="location.reload();return false;">atualizar lista</a>.</span>
+        <select id="raiz" name="raiz" required>
+          {% for d in discos %}
+          <option value="{{ d.valor }}" data-rotulo="{{ d.rotulo }}">{{ d.texto }}</option>
+          {% else %}
+          <option value="" disabled selected>Nenhum disco detectado — ligue um HD e atualize</option>
+          {% endfor %}
+        </select>
+        {% if not discos %}<div class="ajuda" style="color:var(--warn)">Conecte o HD por USB e clique em “atualizar lista”.</div>{% endif %}
       </div>
-    </details>
 
-    <div class="ferramentas">
-      Metadados:
-      {% for nome, rot in [('siegfried','Siegfried (formato)'), ('mediainfo','MediaInfo (A/V)'), ('exiftool','ExifTool (imagem)')] %}
-        <span class="fbadge {{ 'ok' if ferramentas[nome] else 'no' }}">{{ rot }}: {{ '✓ disponível' if ferramentas[nome] else '— ausente' }}</span>
-      {% endfor %}
-      {% if not ferramentas.mediainfo %}
-      <div class="ajuda" style="color:#8a5a00;margin-top:.3rem">Sem o <b>MediaInfo</b>, os metadados técnicos de áudio/vídeo não são capturados. Coloque <code>MediaInfo.exe</code> (e, para imagens, <code>exiftool.exe</code> junto da pasta <code>exiftool_files</code>) numa pasta <code>ferramentas</code> ao lado do programa — depois é só clicar em “Completar metadados”.</div>
+      <div class="campo">
+        <label for="disco">Nome deste HD no catálogo <span class="obrig">*</span></label>
+        <span class="ajuda">Apelido que identifica este disco no inventário. Já sugerimos o nome do volume — pode manter ou ajustar (ex.: <i>TRANSPORTE A</i>).</span>
+        <input id="disco" name="disco" required placeholder="ex.: TRANSPORTE A">
+      </div>
+
+      <div class="campo">
+        <label for="grupo">Grupo do disco <span class="opc">(opcional)</span></label>
+        <span class="ajuda">Ajuda a organizar os HDs por finalidade. Na dúvida, deixe “não classificar”.</span>
+        <select id="grupo" name="grupo">
+          <option value="">— não classificar —</option>
+          <option value="antigos">Antigos (acervo histórico / arquivo morto)</option>
+          <option value="uso_continuo">Uso contínuo (material do dia a dia)</option>
+          <option value="transporte">Transporte (HD usado para mover arquivos)</option>
+        </select>
+      </div>
+
+      <details class="avancado">
+        <summary>Opções avançadas</summary>
+        <div class="campo">
+          <label for="subpasta">Varrer só uma subpasta <span class="opc">(opcional)</span></label>
+          <span class="ajuda">Deixe <b>vazio</b> para varrer o disco inteiro (o normal). Preencha só para limitar a uma pasta dentro do disco.</span>
+          <input id="subpasta" name="subpasta" placeholder="(vazio = disco inteiro)">
+        </div>
+      </details>
+
+      <div class="ferramentas" style="margin-top:1rem">
+        <span class="ajuda" style="margin-bottom:.35rem">Metadados disponíveis:</span>
+        {% for nome, rot in [('siegfried','Siegfried (formato)'), ('mediainfo','MediaInfo (A/V)'), ('exiftool','ExifTool (imagem)')] %}
+          <span class="fbadge {{ 'ok' if ferramentas[nome] else 'no' }}">{{ rot }}: {{ '✓' if ferramentas[nome] else 'ausente' }}</span>
+        {% endfor %}
+      </div>
+
+      <div class="btn-row">
+      {% if rodando %}
+        <button type="submit" class="btn" disabled title="Aguarde a operação atual terminar">▶ Operação em andamento…</button>
+      {% else %}
+        <button type="submit" class="btn">▶ Iniciar varredura</button>
+        <button type="submit" class="btn ghost" formaction="/backfill" title="Completa só os metadados de áudio/vídeo/imagem que faltaram, sem re-varrer">＋ Completar metadados (sem re-varrer)</button>
       {% endif %}
-    </div>
-
-    {% if rodando %}
-    <button type="submit" disabled title="Aguarde a operação atual terminar">▶ Operação em andamento…</button>
-    {% else %}
-    <button type="submit">▶ Iniciar varredura</button>
-    <button type="submit" class="secund" formaction="/backfill" title="Completa só os metadados de áudio/vídeo/imagem que faltaram, sem re-varrer o disco">＋ Completar metadados de mídia (sem re-varrer)</button>
-    {% endif %}
-  </form>
-
-  <div class="etapa">📦 Etapa 2 · Análise e planejamento
-    <small>A partir dos manifestos já gerados — <b>não precisa varrer de novo</b>, nem estar com os HDs ligados. Rode quando quiser.</small>
+      </div>
+    </form>
   </div>
-
-  <h2>Relatório do acervo</h2>
-  {% if tem_manifestos %}
-  <p class="ajuda" style="margin-bottom:.5rem">Gera um painel visual + planilhas (inventário consolidado e duplicatas entre discos) a partir de tudo que já foi varrido. É um arquivo que você guarda e abre offline — não precisa de banco nem internet.</p>
-  <form action="/relatorio" method="post" style="background:none;border:0;padding:0;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
-    <button type="submit" style="width:auto;margin:0;background:#1e5b32">📊 Gerar / atualizar relatório</button>
-    <a href="/relatorio/ver" style="font-size:.9rem;color:var(--azul)">ver último relatório</a>
-  </form>
-  {% else %}
-  <p class="ajuda">Disponível após a primeira varredura — ele resume o acervo (volume, formatos, duplicatas) num painel que você guarda.</p>
-  {% endif %}
-
-  <h2>Plano de deduplicação</h2>
-  {% if tem_manifestos %}
-  <p class="ajuda" style="margin-bottom:.5rem">Propõe o que remover para liberar espaço mantendo <b>2 cópias em 2 discos</b> de cada conteúdo. <b>Não apaga nada</b> — gera planilhas para a equipe revisar e executar. Quanto mais discos varridos juntos, melhor o resultado.</p>
-  <form action="/dedup" method="post" style="background:none;border:0;padding:0;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
-    <button type="submit" style="width:auto;margin:0;background:#7a4d00">🧹 Gerar plano de deduplicação</button>
-  </form>
-  {% else %}
-  <p class="ajuda">Disponível após a primeira varredura — cruza os conteúdos idênticos (mesmo SHA-256) e propõe o que liberar sem perder segurança.</p>
-  {% endif %}
-
-  <h2>Plano de espelhamento (compra de discos)</h2>
-  {% if tem_manifestos %}
-  <p class="ajuda" style="margin-bottom:.5rem">Calcula <b>quantos discos comprar e de que tamanho</b> para guardar tudo com 2 cópias em 2 discos, gastando o mínimo. Baseado no conteúdo único (sem duplicatas). Não copia nada.</p>
-  <form action="/espelhamento" method="post" style="background:none;border:0;padding:0;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
-    <button type="submit" style="width:auto;margin:0;background:#334">💽 Gerar plano de espelhamento</button>
-  </form>
-  {% else %}
-  <p class="ajuda">Disponível após a primeira varredura — dimensiona a compra de discos para o acervo com redundância.</p>
-  {% endif %}
 
   <h2>Discos já varridos</h2>
-  <table>
-    <tr><th>Disco</th><th>Grupo</th><th>Status</th><th>Arquivos</th><th>Tamanho</th></tr>
-    {% for d in resumo %}
-    <tr><td>{{ d[0] }}</td><td>{{ d[1] or '—' }}</td><td>{{ d[2] }}</td><td>{{ d[3] }}</td>
-        <td>{{ '%.1f'|format((d[4] or 0)/1e12) }} TB</td></tr>
-    {% else %}
-    <tr><td colspan="5" style="color:var(--cinza)">Nenhum disco varrido ainda{% if not online %} (ou em modo offline — o resumo vem do banco){% endif %}.</td></tr>
-    {% endfor %}
-  </table>
-
-  <p class="rodape"><a href="/acompanhar">Acompanhar progresso</a> · <a href="/log">ver log técnico</a></p>
-
+  <div class="card pad0">
+    <table>
+      <tr><th>Disco</th><th>Grupo</th><th>Status</th><th>Arquivos</th><th>Tamanho</th></tr>
+      {% for d in resumo %}
+      <tr><td>{{ d[0] }}</td><td>{{ d[1] or '—' }}</td><td>{{ d[2] }}</td><td>{{ d[3] }}</td>
+          <td>{{ '%.1f'|format((d[4] or 0)/1e12) }} TB</td></tr>
+      {% else %}
+      <tr><td colspan="5" class="muted" style="padding:1rem">Nenhum disco varrido ainda{% if not online %} (offline — o resumo vem do banco){% endif %}.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+{% endblock %}
+{% block scripts %}
   <script>
-    // Preenche automaticamente o "nome no catálogo" com o rótulo do disco escolhido,
-    // a menos que a pessoa já tenha digitado algo à mão.
     (function(){
-      var sel = document.getElementById('raiz');
-      var etq = document.getElementById('disco');
+      var sel = document.getElementById('raiz'), etq = document.getElementById('disco');
       if(!sel || !etq) return;
-      var autopreenchido = true;
-      etq.addEventListener('input', function(){ autopreenchido = false; });
+      var auto = true;
+      etq.addEventListener('input', function(){ auto = false; });
       function aplicar(){
         var opt = sel.options[sel.selectedIndex];
         var rot = opt ? (opt.getAttribute('data-rotulo') || '') : '';
-        if(rot && (autopreenchido || etq.value.trim() === '')){
-          etq.value = rot; autopreenchido = true;
-        }
+        if(rot && (auto || etq.value.trim() === '')){ etq.value = rot; auto = true; }
       }
-      sel.addEventListener('change', aplicar);
-      aplicar();  // aplica para o disco já selecionado ao abrir
+      sel.addEventListener('change', aplicar); aplicar();
     })();
   </script>
-</body>
-</html>
+{% endblock %}

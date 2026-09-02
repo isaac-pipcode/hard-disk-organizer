@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block titulo %}Espelhamento — PRESERVA-SCAN{% endblock %}
+{% block conteudo %}
+  <h1>Espelhamento — compra de discos</h1>
+  <p class="lede">Calcula <b>quantos discos comprar e de que tamanho</b> para guardar tudo com 2 cópias em
+     2 discos, gastando o mínimo. Baseado no conteúdo único (sem duplicatas). Não copia nada.</p>
+
+  <div class="card">
+    <form action="/espelhamento" method="post"><button class="btn">💽 {{ 'Atualizar' if resumo else 'Gerar' }} plano de espelhamento</button></form>
+    <p class="ajuda" style="margin-top:.7rem">Quanto mais discos varridos juntos, mais barato o plano (duplicatas entre discos deixam de contar duas vezes).</p>
+  </div>
+
+  {% if resumo %}
+  {% set rec = resumo.recomendacao %}
+  <div class="card" style="border-left:4px solid var(--accent)">
+    <div style="font-size:1.5rem;font-weight:700">{{ rec.discos_total }} discos de {{ rec.capacidade_tb }} TB</div>
+    <div class="muted">recomendado — {{ rec.discos_primarios }} primário(s) + {{ rec.discos_espelho }} espelho(s),
+      uso médio {{ (rec.uso_medio*100)|round|int }}% · {{ resumo.conteudo_unico.volume_humano }} únicos → {{ resumo.volume_espelhado_humano }} espelhados</div>
+  </div>
+  <h2>Opções por tamanho de disco</h2>
+  <div class="card pad0">
+    <table>
+      <tr><th>Disco</th><th>Primários</th><th>Total (c/ espelho)</th><th>TB comprados</th><th>Uso</th></tr>
+      {% for t in resumo.opcoes_por_capacidade %}
+      <tr {% if t.capacidade_tb == rec.capacidade_tb %}style="background:var(--ok-soft);font-weight:600"{% endif %}>
+        <td>{{ t.capacidade_tb }} TB</td><td>{{ t.discos_primarios }}</td><td>{{ t.discos_total }}</td>
+        <td>{{ t.capacidade_total_tb }} TB</td><td>{{ (t.uso_medio*100)|round|int }}%</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  <div class="card">
+    <b>Arquivos gerados</b>:<br><code>{{ pasta }}</code>
+    <ul class="muted" style="margin:.5rem 0 0">
+      <li><b>plano_espelhamento.csv</b> — cada conteúdo e em qual disco primário/espelho fica.</li>
+      <li><b>plano_espelhamento_resumo.json</b> — os números acima.</li>
+    </ul>
+  </div>
+  {% endif %}
+{% endblock %}
