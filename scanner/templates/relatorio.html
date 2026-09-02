@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block titulo %}Relatório do acervo — PRESERVA-SCAN{% endblock %}
+{% block conteudo %}
+  <h1>Relatório do acervo</h1>
+  <p class="lede">Gera um painel visual + planilhas (inventário consolidado com colunas audiovisuais e
+     duplicatas entre discos) a partir de tudo que já foi varrido. Abre offline — não precisa de banco.</p>
+
+  <div class="card">
+    <div class="btn-row" style="margin-top:0">
+      <form action="/relatorio" method="post"><button class="btn">📊 Gerar / atualizar relatório</button></form>
+      <a class="btn ghost" href="/relatorio/ver" target="_blank">Abrir último relatório ↗</a>
+    </div>
+    <p class="ajuda" style="margin-top:.9rem">Saídas (na pasta <code>relatorio/</code> ao lado dos manifestos):
+      <b>dashboard.html</b> (painel visual), <b>inventario_consolidado.csv</b>,
+      <b>duplicatas.csv</b> e <b>resumo.json</b>.</p>
+  </div>
+{% endblock %}

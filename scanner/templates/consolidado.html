@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block titulo %}Mapa entre discos — PRESERVA-SCAN{% endblock %}
+{% block conteudo %}
+  <h1>Mapa entre discos</h1>
+  <p class="lede">Cruza todos os discos e mostra <b>o que está repetido onde</b> — e quais discos podem ser
+     esvaziados por já terem todo o conteúdo em outro lugar. Não altera nada.</p>
+
+  <div class="card">
+    <form action="/consolidado" method="post"><button class="btn">🗺️ {{ 'Atualizar' if resumo else 'Gerar' }} mapa entre discos</button></form>
+    <p class="ajuda" style="margin-top:.7rem">Faz sentido com vários discos varridos juntos — com um só, tudo é exclusivo.</p>
+  </div>
+
+  {% if resumo %}
+  <div class="cards-num">
+    <div class="kpi"><div class="n">{{ resumo.discos }}</div><small>discos no inventário</small></div>
+    <div class="kpi"><div class="n">{{ resumo.bytes_em_2mais_discos_humano }}</div><small>conteúdo em 2+ discos</small></div>
+    <div class="kpi"><div class="n">{{ resumo.bytes_em_1_disco_humano }}</div><small>conteúdo em 1 disco só</small></div>
+  </div>
+  {% if resumo.discos_esvaziaveis %}
+  <div class="aviso a-ok" style="margin-top:1.1rem">♻️ <b>{{ resumo.discos_esvaziaveis|length }}</b> disco(s) podem ser esvaziados —
+    tudo neles já existe em outro disco: <b>{{ resumo.discos_esvaziaveis|join(', ') }}</b></div>
+  {% else %}
+  <div class="aviso a-rod" style="margin-top:1.1rem">Nenhum disco é totalmente redundante ainda.</div>
+  {% endif %}
+
+  <h2>Por disco</h2>
+  <div class="card pad0"><table>
+    <tr><th>Disco</th><th>Conteúdos</th><th>Volume</th><th>Exclusivo (só aqui)</th><th>Pode esvaziar?</th></tr>
+    {% for d, v in resumo.por_disco.items() %}
+    <tr><td>{{ d }}</td><td>{{ '{:,}'.format(v.conteudos).replace(',','.') }}</td>
+      <td>{{ humano(v.bytes) }}</td>
+      <td>{{ humano(v.bytes_exclusivos) }}</td>
+      <td>{{ '✅ sim' if v.pode_esvaziar else '—' }}</td></tr>
+    {% endfor %}
+  </table></div>
+
+  {% if resumo.pares_top %}
+  <h2>Discos que mais compartilham</h2>
+  <div class="card pad0"><table>
+    <tr><th>Disco A</th><th>Disco B</th><th>Conteúdos</th><th>Compartilhado</th></tr>
+    {% for p in resumo.pares_top[:10] %}
+    <tr><td>{{ p.disco_a }}</td><td>{{ p.disco_b }}</td><td>{{ '{:,}'.format(p.conteudos).replace(',','.') }}</td><td>{{ p.bytes_humano }}</td></tr>
+    {% endfor %}
+  </table></div>
+  {% endif %}
+
+  <div class="card">
+    <b>Arquivos gerados</b>:<br><code>{{ pasta }}</code>
+    <ul class="muted" style="margin:.5rem 0 0">
+      <li><b>discos_resumo.csv</b> — por disco: exclusivo × redundante, e “pode esvaziar”.</li>
+      <li><b>discos_sobreposicao.csv</b> — quanto cada par de discos compartilha.</li>
+    </ul>
+  </div>
+  {% endif %}
+{% endblock %}

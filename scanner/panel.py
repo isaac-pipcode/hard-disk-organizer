@@ -28,6 +28,7 @@ import scan       # a varredura roda no MESMO processo (essencial para o .exe em
 import relatorio  # gera o relatório local (dashboard + planilhas) a partir dos manifestos
 import dedup      # planeja a deduplicação (fase 2) a partir dos manifestos
 import espelhamento  # planeja o espelhamento / compra de discos (fase 2)
+import consolidado   # visão entre discos: o que está repetido onde (fase 2)
 
 
 def _recurso(rel):
@@ -47,6 +48,18 @@ MANIFEST_DIR = Path(os.environ.get("MANIFEST_DIR") or (_BASE_DADOS / "manifestos
 
 app = FastAPI(title="PRESERVA-SCAN — Operacao")
 templates = Jinja2Templates(directory=_recurso("templates"))
+templates.env.globals["humano"] = relatorio.humano   # formatar bytes nos templates
+
+
+def _tem_manifestos():
+    return bool(list(MANIFEST_DIR.glob("manifesto_*.jsonl")))
+
+
+def _ctx(**extra):
+    """Contexto comum a todas as telas (sidebar): status do banco e se há manifestos."""
+    base = {"online": db.conectado(), "tem_manifestos": _tem_manifestos()}
+    base.update(extra)
+    return base
 
 STALL_SEGUNDOS = 90           # sem batimento por mais que isto (em fase com pulso) = suspeita de travamento
 TAIL_LINHAS = 400             # linhas de log mostradas no painel
@@ -236,13 +249,31 @@ def home(request: Request):
                 resumo = cur.fetchall()
         except Exception:
             resumo = []
-    tem_manifestos = bool(list(MANIFEST_DIR.glob("manifesto_*.jsonl")))
-    return templates.TemplateResponse(request, "index.html", {
-        "resumo": resumo, "online": db.conectado(),
-        "discos": discos_disponiveis(), "tem_manifestos": tem_manifestos,
-        "rodando": _rodando(), "job_estado": JOB["estado"], "job_disco": JOB["disco"],
-        "ferramentas": ferramentas_status(),
-    })
+    return templates.TemplateResponse(request, "index.html", _ctx(
+        ativo="varredura", resumo=resumo, discos=discos_disponiveis(),
+        rodando=_rodando(), job_estado=JOB["estado"], job_disco=JOB["disco"],
+        ferramentas=ferramentas_status(),
+    ))
+
+
+@app.get("/passo/relatorio", response_class=HTMLResponse)
+def passo_relatorio(request: Request):
+    return templates.TemplateResponse(request, "relatorio.html", _ctx(ativo="relatorio"))
+
+
+@app.get("/passo/dedup", response_class=HTMLResponse)
+def passo_dedup(request: Request):
+    return templates.TemplateResponse(request, "dedup.html", _ctx(ativo="dedup", resumo=None, pasta=str(DEDUP_DIR)))
+
+
+@app.get("/passo/espelhamento", response_class=HTMLResponse)
+def passo_espelhamento(request: Request):
+    return templates.TemplateResponse(request, "espelhamento.html", _ctx(ativo="espelhamento", resumo=None, pasta=str(ESPELHO_DIR)))
+
+
+@app.get("/passo/consolidado", response_class=HTMLResponse)
+def passo_consolidado(request: Request):
+    return templates.TemplateResponse(request, "consolidado.html", _ctx(ativo="consolidado", resumo=None, pasta=str(CONSOLIDADO_DIR)))
 
 
 def _salvar_env(url):
@@ -263,72 +294,14 @@ def _salvar_env(url):
     return env_path
 
 
-def _pagina_config(valor="", erro=None, ok=None):
-    """Tela de configuração do banco (Supabase) — o operador cola a string e conecta,
-    sem criar arquivo .env à mão."""
-    valor = html.escape(valor or "")
-    alerta = ""
-    if erro:
-        alerta = f'<div class="box err">⚠️ {html.escape(erro)}</div>'
-    elif ok:
-        alerta = f'<div class="box ok">✅ {html.escape(ok)}</div>'
-    return f"""<!doctype html><html lang="pt-br"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PRESERVA-SCAN — conectar ao banco</title>
-<style>
-  :root{{ --ink:#1a1a1a; --bg:#fff; --cinza:#666; --azul:#1857b8; --linha:#e3e3e3;
-          --okbg:#e7f6ec; --okln:#1c7a3f; --errbg:#fdecec; --errln:#b3261e; }}
-  @media (prefers-color-scheme:dark){{ :root{{ --ink:#ececec; --bg:#1b1b1d; --cinza:#a6a6a6;
-          --azul:#7aa7ff; --linha:#3a3a3d; --okbg:#12331f; --okln:#6ee7a0; --errbg:#3a1c1a; --errln:#ff8a80; }} }}
-  *{{ box-sizing:border-box; }}
-  body{{ font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg);
-         color:var(--ink); max-width:720px; margin:0 auto; padding:1.5rem 1.2rem; line-height:1.5; }}
-  h1{{ font-size:1.3rem; margin:.2rem 0 .3rem; }}
-  a{{ color:var(--azul); }}
-  label{{ display:block; font-weight:600; margin:1.1rem 0 .35rem; }}
-  textarea{{ width:100%; min-height:90px; font-family:ui-monospace,Consolas,monospace; font-size:.9rem;
-             padding:.6rem; border:1px solid var(--linha); border-radius:8px; background:var(--bg); color:var(--ink); }}
-  .btn{{ display:inline-block; margin-top:1rem; background:var(--azul); color:#fff; border:0; border-radius:8px;
-         padding:.7rem 1.3rem; font-size:1rem; font-weight:600; cursor:pointer; }}
-  .btn.sec{{ background:transparent; color:var(--azul); border:1px solid var(--azul); margin-left:.5rem; }}
-  .ajuda{{ color:var(--cinza); font-size:.9rem; }}
-  .passos{{ background:var(--okbg); border-radius:8px; padding:.8rem 1rem; font-size:.9rem; margin:1rem 0; }}
-  .box{{ border-radius:8px; padding:.7rem .9rem; margin:1rem 0; font-size:.92rem; }}
-  .box.err{{ background:var(--errbg); color:var(--errln); }}
-  .box.ok{{ background:var(--okbg); color:var(--okln); }}
-  code{{ background:rgba(128,128,128,.15); padding:.05rem .3rem; border-radius:4px; }}
-</style></head><body>
-  <p><a href="/">← voltar ao painel</a></p>
-  <h1>Conectar ao banco (Supabase)</h1>
-  <p class="ajuda">Cole aqui a string de conexão do seu projeto. O programa testa e
-     guarda sozinho — você <b>não</b> precisa criar arquivo nenhum.</p>
-  {alerta}
-  <div class="passos">
-    <b>Onde achar a string:</b> no Supabase, botão <b>Connect</b> (no topo) →
-    aba <b>Session pooler</b> → copie a string inteira. Troque <code>[YOUR-PASSWORD]</code>
-    pela senha do banco (de preferência só letras e números).
-  </div>
-  <form method="post" action="/config">
-    <label for="cs">String de conexão (DATABASE_URL)</label>
-    <textarea id="cs" name="connection_string" placeholder="postgresql://postgres.SEU-REF:SENHA@aws-0-...pooler.supabase.com:5432/postgres">{valor}</textarea>
-    <div>
-      <button class="btn" type="submit">Testar e conectar</button>
-      <button class="btn sec" type="submit" name="connection_string" value="">Desconectar (offline)</button>
-    </div>
-  </form>
-  <p class="ajuda" style="margin-top:1.4rem">🔒 A string fica guardada só nesta máquina
-     (arquivo <code>.env</code> ao lado do programa). Contém a senha do banco — trate
-     este computador como de confiança.</p>
-</body></html>"""
-
-
 @app.get("/config", response_class=HTMLResponse)
 def config_form(request: Request):
-    return HTMLResponse(_pagina_config(db.DATABASE_URL or ""))
+    return templates.TemplateResponse(request, "config.html",
+        _ctx(ativo="config", valor=db.DATABASE_URL or ""))
 
 
-@app.post("/config")
-def config_salvar(connection_string: str = Form("")):
+@app.post("/config", response_class=HTMLResponse)
+def config_salvar(request: Request, connection_string: str = Form("")):
     url = connection_string.strip()
     if not url:
         # Desconectar: volta ao modo offline e remove do .env.
@@ -337,7 +310,8 @@ def config_salvar(connection_string: str = Form("")):
         return RedirectResponse(url="/", status_code=303)
     ok, msg = db.testar(url)
     if not ok:
-        return HTMLResponse(_pagina_config(url, erro=msg), status_code=400)
+        return templates.TemplateResponse(request, "config.html",
+            _ctx(ativo="config", valor=url, erro=msg), status_code=400)
     db.configurar(url)
     _salvar_env(url)
     return RedirectResponse(url="/", status_code=303)
@@ -448,138 +422,46 @@ def ver_relatorio():
 DEDUP_DIR = MANIFEST_DIR / "dedup"
 
 
-@app.post("/dedup")
-def gerar_dedup():
+@app.post("/dedup", response_class=HTMLResponse)
+def gerar_dedup(request: Request):
     """Gera o plano de deduplicação (não apaga nada — só propõe)."""
     try:
         resumo = dedup.planejar(MANIFEST_DIR, DEDUP_DIR)
-    except FileNotFoundError as e:
-        return HTMLResponse(f"<p>{html.escape(str(e))} <a href='/'>voltar</a></p>", status_code=400)
     except Exception as e:
-        return HTMLResponse(
-            f"<p>Falha ao gerar o plano de deduplicação: {html.escape(type(e).__name__)}: "
-            f"{html.escape(str(e))} <a href='/'>voltar</a></p>", status_code=500)
-    return HTMLResponse(_pagina_dedup(resumo))
-
-
-def _pagina_dedup(r):
-    risco = r.get("risco_1_disco", {})
-    pol = r.get("politica", {})
-    def n(x): return f"{int(x):,}".replace(",", ".")
-    pasta = html.escape(str(DEDUP_DIR))
-    return f"""<!doctype html><html lang="pt-br"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PRESERVA-SCAN — plano de deduplicação</title>
-<style>
-  :root{{ --ink:#1a1a1a; --bg:#fff; --cinza:#666; --azul:#1857b8; --linha:#e3e3e3;
-          --okbg:#e7f6ec; --okln:#1c7a3f; --avbg:#fff7e6; --avln:#8a5a00; }}
-  @media (prefers-color-scheme:dark){{ :root{{ --ink:#ececec; --bg:#1b1b1d; --cinza:#a6a6a6;
-          --azul:#7aa7ff; --linha:#3a3a3d; --okbg:#12331f; --okln:#6ee7a0; --avbg:#3a2f14; --avln:#ffd27a; }} }}
-  body{{ font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg);
-         color:var(--ink); max-width:760px; margin:0 auto; padding:1.5rem 1.2rem; line-height:1.5; }}
-  a{{ color:var(--azul); }}
-  h1{{ font-size:1.3rem; margin:.2rem 0 .6rem; }}
-  .num{{ font-size:1.8rem; font-weight:700; }}
-  .cards{{ display:flex; gap:.8rem; flex-wrap:wrap; margin:1rem 0; }}
-  .card{{ flex:1 1 200px; border:1px solid var(--linha); border-radius:10px; padding:.9rem 1rem; }}
-  .card small{{ color:var(--cinza); }}
-  .box{{ border-radius:10px; padding:.8rem 1rem; margin:1rem 0; }}
-  .ok{{ background:var(--okbg); color:var(--okln); }}
-  .av{{ background:var(--avbg); color:var(--avln); }}
-  code{{ background:rgba(128,128,128,.15); padding:.05rem .3rem; border-radius:4px; word-break:break-all; }}
-</style></head><body>
-  <p><a href="/">← voltar ao painel</a></p>
-  <h1>Plano de deduplicação</h1>
-  <p style="color:var(--cinza)">Política: manter <b>{pol.get('min_copias',2)} cópias</b> em
-     <b>{pol.get('min_discos',2)} discos</b>; a cópia que fica é a de caminho mais organizado.
-     <b>Nada é apagado</b> — este é um plano para a equipe revisar e executar.</p>
-  <div class="cards">
-    <div class="card"><div class="num">{r.get('espaco_recuperavel_humano','—')}</div>
-      <small>espaço recuperável ({n(r.get('arquivos_removiveis',0))} arquivos removíveis)</small></div>
-    <div class="card"><div class="num">{n(r.get('grupos_com_duplicata',0))}</div>
-      <small>grupos de conteúdo duplicado</small></div>
-    <div class="card"><div class="num">{n(r.get('conteudos_unicos',0))}</div>
-      <small>conteúdos únicos (de {n(r.get('arquivos_no_acervo',0))} arquivos)</small></div>
-  </div>
-  {"<div class='box av'>⚠️ <b>"+n(risco.get('grupos',0))+"</b> conteúdo(s) duplicado(s) existem hoje em <b>1 só disco</b> ("+risco.get('volume_humano','')+"). O plano mantém uma cópia e marca para <b>espelhamento</b> — deduplicar aqui libera espaço, mas esses arquivos ficam sem redundância até serem copiados para um 2º disco.</div>" if risco.get('grupos') else "<div class='box ok'>✅ Todos os conteúdos duplicados já estão em 2+ discos.</div>"}
-  <div class="box ok">
-    <b>Arquivos gerados</b> (na pasta ao lado dos manifestos):<br>
-    <code>{pasta}</code><br><br>
-    • <b>plano_dedup.csv</b> — cada arquivo que pode sair, com o motivo e qual cópia fica.<br>
-    • <b>plano_dedup_manter.csv</b> — as cópias que ficam (para conferência).<br>
-    • <b>plano_dedup_resumo.json</b> — os números acima.
-  </div>
-  <p style="color:var(--cinza);font-size:.9rem">Recomendação: revise o <code>plano_dedup.csv</code>
-     antes de remover qualquer coisa. A remoção é um passo manual e conferido.</p>
-</body></html>"""
+        return templates.TemplateResponse(request, "dedup.html",
+            _ctx(ativo="dedup", resumo=None, pasta=str(DEDUP_DIR), erro=f"{type(e).__name__}: {e}"))
+    return templates.TemplateResponse(request, "dedup.html",
+        _ctx(ativo="dedup", resumo=resumo, pasta=str(DEDUP_DIR)))
 
 
 ESPELHO_DIR = MANIFEST_DIR / "espelhamento"
 
 
-@app.post("/espelhamento")
-def gerar_espelhamento():
+@app.post("/espelhamento", response_class=HTMLResponse)
+def gerar_espelhamento(request: Request):
     """Gera o plano de espelhamento (quantos discos comprar). Não copia nada."""
     try:
         resumo = espelhamento.planejar(MANIFEST_DIR, ESPELHO_DIR)
-    except FileNotFoundError as e:
-        return HTMLResponse(f"<p>{html.escape(str(e))} <a href='/'>voltar</a></p>", status_code=400)
     except Exception as e:
-        return HTMLResponse(
-            f"<p>Falha ao gerar o plano de espelhamento: {html.escape(type(e).__name__)}: "
-            f"{html.escape(str(e))} <a href='/'>voltar</a></p>", status_code=500)
-    return HTMLResponse(_pagina_espelho(resumo))
+        return templates.TemplateResponse(request, "espelhamento.html",
+            _ctx(ativo="espelhamento", resumo=None, pasta=str(ESPELHO_DIR), erro=f"{type(e).__name__}: {e}"))
+    return templates.TemplateResponse(request, "espelhamento.html",
+        _ctx(ativo="espelhamento", resumo=resumo, pasta=str(ESPELHO_DIR)))
 
 
-def _pagina_espelho(r):
-    rec = r.get("recomendacao", {})
-    uni = r.get("conteudo_unico", {})
-    pasta = html.escape(str(ESPELHO_DIR))
-    linhas = ""
-    for t in r.get("opcoes_por_capacidade", []):
-        destaque = ' style="font-weight:700;background:var(--okbg)"' if t.get("capacidade_tb") == rec.get("capacidade_tb") else ""
-        linhas += (f"<tr{destaque}><td>{t['capacidade_tb']} TB</td><td>{t['discos_primarios']}</td>"
-                   f"<td>{t['discos_total']}</td><td>{t['capacidade_total_tb']} TB</td>"
-                   f"<td>{t['uso_medio']*100:.0f}%</td></tr>")
-    return f"""<!doctype html><html lang="pt-br"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PRESERVA-SCAN — plano de espelhamento</title>
-<style>
-  :root{{ --ink:#1a1a1a; --bg:#fff; --cinza:#666; --azul:#1857b8; --linha:#e3e3e3; --okbg:#e7f6ec; --okln:#1c7a3f; }}
-  @media (prefers-color-scheme:dark){{ :root{{ --ink:#ececec; --bg:#1b1b1d; --cinza:#a6a6a6; --azul:#7aa7ff; --linha:#3a3a3d; --okbg:#12331f; --okln:#6ee7a0; }} }}
-  body{{ font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); max-width:760px; margin:0 auto; padding:1.5rem 1.2rem; line-height:1.5; }}
-  a{{ color:var(--azul); }} h1{{ font-size:1.3rem; margin:.2rem 0 .6rem; }}
-  .num{{ font-size:1.8rem; font-weight:700; }}
-  .card{{ border:1px solid var(--linha); border-radius:10px; padding:.9rem 1rem; margin:1rem 0; }}
-  table{{ width:100%; border-collapse:collapse; font-size:.92rem; }}
-  th,td{{ text-align:left; padding:.4rem .55rem; border-bottom:1px solid var(--linha); }}
-  th{{ color:var(--cinza); font-size:.8rem; text-transform:uppercase; }}
-  .box{{ border-radius:10px; padding:.8rem 1rem; margin:1rem 0; background:var(--okbg); color:var(--okln); }}
-  code{{ background:rgba(128,128,128,.15); padding:.05rem .3rem; border-radius:4px; word-break:break-all; }}
-</style></head><body>
-  <p><a href="/">← voltar ao painel</a></p>
-  <h1>Plano de espelhamento (compra de discos)</h1>
-  <p style="color:var(--cinza)">Para guardar todo o acervo com <b>2 cópias em 2 discos</b>,
-     gastando o mínimo. Baseado no conteúdo único (já sem duplicatas).</p>
-  <div class="card">
-    <div class="num">{html.escape(rec.get('capacidade_tb') and f"{rec['discos_total']} discos de {rec['capacidade_tb']} TB" or '—')}</div>
-    <small style="color:var(--cinza)">recomendado — {rec.get('discos_primarios','?')} primário(s) + {rec.get('discos_espelho','?')} espelho(s),
-      uso médio {rec.get('uso_medio',0)*100:.0f}% · {uni.get('volume_humano','?')} únicos → {html.escape(r.get('volume_espelhado_humano','?'))} espelhados</small>
-  </div>
-  <table>
-    <tr><th>Disco</th><th>Primários</th><th>Total (c/ espelho)</th><th>TB comprados</th><th>Uso</th></tr>
-    {linhas}
-  </table>
-  <div class="box">
-    <b>Arquivos gerados</b> (na pasta ao lado dos manifestos):<br>
-    <code>{pasta}</code><br>
-    • <b>plano_espelhamento.csv</b> — cada conteúdo e em qual disco primário/espelho fica.<br>
-    • <b>plano_espelhamento_resumo.json</b> — os números acima.
-  </div>
-  <p style="color:var(--cinza);font-size:.9rem">Quanto mais discos varridos juntos, melhor o plano
-     (duplicatas entre discos deixam de contar duas vezes). Para economizar, discos existentes
-     saudáveis podem virar espelho depois de consolidados e conferidos.</p>
-</body></html>"""
+CONSOLIDADO_DIR = MANIFEST_DIR / "consolidado"
+
+
+@app.post("/consolidado", response_class=HTMLResponse)
+def gerar_consolidado(request: Request):
+    """Gera o mapa entre discos (o que está repetido onde). Não altera nada."""
+    try:
+        resumo = consolidado.gerar(MANIFEST_DIR, CONSOLIDADO_DIR)
+    except Exception as e:
+        return templates.TemplateResponse(request, "consolidado.html",
+            _ctx(ativo="consolidado", resumo=None, pasta=str(CONSOLIDADO_DIR), erro=f"{type(e).__name__}: {e}"))
+    return templates.TemplateResponse(request, "consolidado.html",
+        _ctx(ativo="consolidado", resumo=resumo, pasta=str(CONSOLIDADO_DIR)))
 
 
 @app.get("/log", response_class=PlainTextResponse)

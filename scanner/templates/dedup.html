@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block titulo %}Deduplicação — PRESERVA-SCAN{% endblock %}
+{% block conteudo %}
+  <h1>Deduplicação</h1>
+  <p class="lede">Propõe o que remover para liberar espaço mantendo <b>2 cópias em 2 discos</b> de cada
+     conteúdo. <b>Não apaga nada</b> — gera planilhas para a equipe revisar e executar.</p>
+
+  <div class="card">
+    <form action="/dedup" method="post"><button class="btn">🧹 {{ 'Atualizar' if resumo else 'Gerar' }} plano de deduplicação</button></form>
+    <p class="ajuda" style="margin-top:.7rem">Lê os manifestos já varridos — não precisa varrer de novo. Quanto mais discos juntos, melhor o resultado.</p>
+  </div>
+
+  {% if resumo %}
+  <div class="cards-num">
+    <div class="kpi"><div class="n">{{ resumo.espaco_recuperavel_humano }}</div><small>espaço recuperável · {{ '{:,}'.format(resumo.arquivos_removiveis).replace(',','.') }} arquivos</small></div>
+    <div class="kpi"><div class="n">{{ '{:,}'.format(resumo.grupos_com_duplicata).replace(',','.') }}</div><small>grupos de conteúdo duplicado</small></div>
+    <div class="kpi"><div class="n">{{ '{:,}'.format(resumo.conteudos_unicos).replace(',','.') }}</div><small>conteúdos únicos</small></div>
+  </div>
+  {% if resumo.risco_1_disco.grupos %}
+  <div class="aviso a-err" style="margin-top:1.1rem">⚠️ <b>{{ resumo.risco_1_disco.grupos }}</b> conteúdo(s) duplicado(s) existem só em <b>1 disco</b>
+    ({{ resumo.risco_1_disco.volume_humano }}). Mantidos e marcados para <b>espelhamento</b> — aqui liberar espaço deixaria o arquivo sem redundância.</div>
+  {% else %}
+  <div class="aviso a-ok" style="margin-top:1.1rem">✅ Todos os conteúdos duplicados já estão em 2+ discos.</div>
+  {% endif %}
+  <div class="card">
+    <b>Arquivos gerados</b> (ao lado dos manifestos):<br><code>{{ pasta }}</code>
+    <ul class="muted" style="margin:.5rem 0 0">
+      <li><b>plano_dedup.csv</b> — cada arquivo que pode sair, com o motivo e qual cópia fica.</li>
+      <li><b>plano_dedup_manter.csv</b> — as cópias que ficam (conferência).</li>
+    </ul>
+    <p class="ajuda" style="margin-top:.7rem">Revise o <code>plano_dedup.csv</code> antes de remover qualquer coisa — a remoção é um passo manual e conferido.</p>
+  </div>
+  {% endif %}
+{% endblock %}

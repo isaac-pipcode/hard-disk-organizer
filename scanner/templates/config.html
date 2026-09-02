@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block titulo %}Banco de dados — PRESERVA-SCAN{% endblock %}
+{% block conteudo %}
+  <h1>Conectar ao banco (Supabase)</h1>
+  <p class="lede">Cole a string de conexão do seu projeto. O programa testa e guarda sozinho — você
+     <b>não</b> precisa criar arquivo nenhum. Opcional: sem banco, tudo funciona offline nos manifestos.</p>
+
+  {% if erro %}<div class="aviso a-err">⚠️ {{ erro }}</div>{% endif %}
+  {% if ok %}<div class="aviso a-ok">✅ {{ ok }}</div>{% endif %}
+
+  <div class="card">
+    <div class="aviso a-rod" style="margin-top:0">
+      <b>Onde achar a string:</b> no Supabase, botão <b>Connect</b> (topo) → aba <b>Session pooler</b> →
+      copie a string inteira. Troque <code>[YOUR-PASSWORD]</code> pela senha do banco (de preferência só letras e números).
+    </div>
+    <form method="post" action="/config">
+      <div class="campo">
+        <label for="cs">String de conexão (DATABASE_URL)</label>
+        <textarea id="cs" name="connection_string" rows="3" placeholder="postgresql://postgres.SEU-REF:SENHA@aws-0-...pooler.supabase.com:5432/postgres">{{ valor }}</textarea>
+      </div>
+      <div class="btn-row">
+        <button class="btn" type="submit">Testar e conectar</button>
+        <button class="btn ghost" type="submit" name="connection_string" value="">Desconectar (offline)</button>
+      </div>
+    </form>
+    <p class="ajuda" style="margin-top:1rem">🔒 A string fica guardada só nesta máquina (arquivo <code>.env</code> ao lado do programa).
+      Contém a senha do banco — trate este computador como de confiança.</p>
+  </div>
+{% endblock %}
