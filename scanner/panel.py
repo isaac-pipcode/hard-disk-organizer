@@ -26,6 +26,7 @@ from starlette.requests import Request
 import db
 import scan       # a varredura roda no MESMO processo (essencial para o .exe empacotado)
 import relatorio  # gera o relatório local (dashboard + planilhas) a partir dos manifestos
+import dedup      # planeja a deduplicação (fase 2) a partir dos manifestos
 
 
 def _recurso(rel):
@@ -441,6 +442,75 @@ def ver_relatorio():
         return HTMLResponse("<p>Relatório ainda não gerado. <a href='/'>voltar</a></p>",
                             status_code=404)
     return HTMLResponse(dash.read_text(encoding="utf-8", errors="replace"))
+
+
+DEDUP_DIR = MANIFEST_DIR / "dedup"
+
+
+@app.post("/dedup")
+def gerar_dedup():
+    """Gera o plano de deduplicação (não apaga nada — só propõe)."""
+    try:
+        resumo = dedup.planejar(MANIFEST_DIR, DEDUP_DIR)
+    except FileNotFoundError as e:
+        return HTMLResponse(f"<p>{html.escape(str(e))} <a href='/'>voltar</a></p>", status_code=400)
+    except Exception as e:
+        return HTMLResponse(
+            f"<p>Falha ao gerar o plano de deduplicação: {html.escape(type(e).__name__)}: "
+            f"{html.escape(str(e))} <a href='/'>voltar</a></p>", status_code=500)
+    return HTMLResponse(_pagina_dedup(resumo))
+
+
+def _pagina_dedup(r):
+    risco = r.get("risco_1_disco", {})
+    pol = r.get("politica", {})
+    def n(x): return f"{int(x):,}".replace(",", ".")
+    pasta = html.escape(str(DEDUP_DIR))
+    return f"""<!doctype html><html lang="pt-br"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PRESERVA-SCAN — plano de deduplicação</title>
+<style>
+  :root{{ --ink:#1a1a1a; --bg:#fff; --cinza:#666; --azul:#1857b8; --linha:#e3e3e3;
+          --okbg:#e7f6ec; --okln:#1c7a3f; --avbg:#fff7e6; --avln:#8a5a00; }}
+  @media (prefers-color-scheme:dark){{ :root{{ --ink:#ececec; --bg:#1b1b1d; --cinza:#a6a6a6;
+          --azul:#7aa7ff; --linha:#3a3a3d; --okbg:#12331f; --okln:#6ee7a0; --avbg:#3a2f14; --avln:#ffd27a; }} }}
+  body{{ font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg);
+         color:var(--ink); max-width:760px; margin:0 auto; padding:1.5rem 1.2rem; line-height:1.5; }}
+  a{{ color:var(--azul); }}
+  h1{{ font-size:1.3rem; margin:.2rem 0 .6rem; }}
+  .num{{ font-size:1.8rem; font-weight:700; }}
+  .cards{{ display:flex; gap:.8rem; flex-wrap:wrap; margin:1rem 0; }}
+  .card{{ flex:1 1 200px; border:1px solid var(--linha); border-radius:10px; padding:.9rem 1rem; }}
+  .card small{{ color:var(--cinza); }}
+  .box{{ border-radius:10px; padding:.8rem 1rem; margin:1rem 0; }}
+  .ok{{ background:var(--okbg); color:var(--okln); }}
+  .av{{ background:var(--avbg); color:var(--avln); }}
+  code{{ background:rgba(128,128,128,.15); padding:.05rem .3rem; border-radius:4px; word-break:break-all; }}
+</style></head><body>
+  <p><a href="/">← voltar ao painel</a></p>
+  <h1>Plano de deduplicação</h1>
+  <p style="color:var(--cinza)">Política: manter <b>{pol.get('min_copias',2)} cópias</b> em
+     <b>{pol.get('min_discos',2)} discos</b>; a cópia que fica é a de caminho mais organizado.
+     <b>Nada é apagado</b> — este é um plano para a equipe revisar e executar.</p>
+  <div class="cards">
+    <div class="card"><div class="num">{r.get('espaco_recuperavel_humano','—')}</div>
+      <small>espaço recuperável ({n(r.get('arquivos_removiveis',0))} arquivos removíveis)</small></div>
+    <div class="card"><div class="num">{n(r.get('grupos_com_duplicata',0))}</div>
+      <small>grupos de conteúdo duplicado</small></div>
+    <div class="card"><div class="num">{n(r.get('conteudos_unicos',0))}</div>
+      <small>conteúdos únicos (de {n(r.get('arquivos_no_acervo',0))} arquivos)</small></div>
+  </div>
+  {"<div class='box av'>⚠️ <b>"+n(risco.get('grupos',0))+"</b> conteúdo(s) duplicado(s) existem hoje em <b>1 só disco</b> ("+risco.get('volume_humano','')+"). O plano mantém uma cópia e marca para <b>espelhamento</b> — deduplicar aqui libera espaço, mas esses arquivos ficam sem redundância até serem copiados para um 2º disco.</div>" if risco.get('grupos') else "<div class='box ok'>✅ Todos os conteúdos duplicados já estão em 2+ discos.</div>"}
+  <div class="box ok">
+    <b>Arquivos gerados</b> (na pasta ao lado dos manifestos):<br>
+    <code>{pasta}</code><br><br>
+    • <b>plano_dedup.csv</b> — cada arquivo que pode sair, com o motivo e qual cópia fica.<br>
+    • <b>plano_dedup_manter.csv</b> — as cópias que ficam (para conferência).<br>
+    • <b>plano_dedup_resumo.json</b> — os números acima.
+  </div>
+  <p style="color:var(--cinza);font-size:.9rem">Recomendação: revise o <code>plano_dedup.csv</code>
+     antes de remover qualquer coisa. A remoção é um passo manual e conferido.</p>
+</body></html>"""
 
 
 @app.get("/log", response_class=PlainTextResponse)

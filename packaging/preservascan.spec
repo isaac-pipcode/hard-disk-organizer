@@ -23,6 +23,7 @@ for pacote in ("uvicorn", "starlette", "fastapi", "anyio"):
     hiddenimports += collect_submodules(pacote)
 hiddenimports += [
     "relatorio",                 # gerador do relatorio local (importado pelo panel)
+    "dedup",                     # planejador de deduplicacao (importado pelo panel)
     "dotenv",                    # carrega .env ao lado do .exe (DATABASE_URL do Supabase)
     "multipart",                 # python-multipart (formularios do painel)
     "psycopg2", "psycopg2.extras",

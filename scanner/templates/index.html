@@ -151,6 +151,16 @@
   <p class="ajuda">Disponível após a primeira varredura — ele resume o acervo (volume, formatos, duplicatas) num painel que você guarda.</p>
   {% endif %}
 
+  <h2>Plano de deduplicação</h2>
+  {% if tem_manifestos %}
+  <p class="ajuda" style="margin-bottom:.5rem">Propõe o que remover para liberar espaço mantendo <b>2 cópias em 2 discos</b> de cada conteúdo. <b>Não apaga nada</b> — gera planilhas para a equipe revisar e executar. Quanto mais discos varridos juntos, melhor o resultado.</p>
+  <form action="/dedup" method="post" style="background:none;border:0;padding:0;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+    <button type="submit" style="width:auto;margin:0;background:#7a4d00">🧹 Gerar plano de deduplicação</button>
+  </form>
+  {% else %}
+  <p class="ajuda">Disponível após a primeira varredura — cruza os conteúdos idênticos (mesmo SHA-256) e propõe o que liberar sem perder segurança.</p>
+  {% endif %}
+
   <h2>Discos já varridos</h2>
   <table>
     <tr><th>Disco</th><th>Grupo</th><th>Status</th><th>Arquivos</th><th>Tamanho</th></tr>
