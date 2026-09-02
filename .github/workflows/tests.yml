@@ -21,5 +21,9 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Rodar o teste de agrupamento do relatório
-        run: python tests/test_agrupamento_relatorio.py
+      - name: Rodar os testes (agrupamento do relatório + deduplicação)
+        run: |
+          for t in tests/test_*.py; do
+            echo "== $t =="
+            python "$t" || exit 1
+          done
