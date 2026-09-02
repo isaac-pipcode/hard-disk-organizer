@@ -161,6 +161,16 @@
   <p class="ajuda">Disponível após a primeira varredura — cruza os conteúdos idênticos (mesmo SHA-256) e propõe o que liberar sem perder segurança.</p>
   {% endif %}
 
+  <h2>Plano de espelhamento (compra de discos)</h2>
+  {% if tem_manifestos %}
+  <p class="ajuda" style="margin-bottom:.5rem">Calcula <b>quantos discos comprar e de que tamanho</b> para guardar tudo com 2 cópias em 2 discos, gastando o mínimo. Baseado no conteúdo único (sem duplicatas). Não copia nada.</p>
+  <form action="/espelhamento" method="post" style="background:none;border:0;padding:0;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+    <button type="submit" style="width:auto;margin:0;background:#334">💽 Gerar plano de espelhamento</button>
+  </form>
+  {% else %}
+  <p class="ajuda">Disponível após a primeira varredura — dimensiona a compra de discos para o acervo com redundância.</p>
+  {% endif %}
+
   <h2>Discos já varridos</h2>
   <table>
     <tr><th>Disco</th><th>Grupo</th><th>Status</th><th>Arquivos</th><th>Tamanho</th></tr>
