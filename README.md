@@ -154,6 +154,10 @@ Saída (na pasta `relatorio/`), tudo em formato aberto que a instituição guard
   para a planilha, sem precisar abrir o JSON nem re-varrer.
 - `duplicatas.csv` — arquivos idênticos (mesmo SHA-256) e **em quantos discos**
   aparecem (responde "está em 1 ou em 2+ discos", como a view `duplicidade` do banco).
+- `descartaveis.csv` — **cache regenerável / lixo de sistema** (`.cfa`/`.pek` do Premiere,
+  `Thumbs.db`, `desktop.ini`, `.DS_Store`, temporários): não são acervo e podem ser
+  removidos sem perda (o programa que os criou regenera). Lista conservadora, só tipos
+  inequívocos — nunca inclui projetos (`.prproj`) nem formatos de câmera.
 - `resumo.json` — números do acervo, para outras ferramentas.
 
 É a alternativa soberana e de custo zero ao dashboard hospedado: o mesmo valor
