@@ -120,12 +120,27 @@ def _linhas(caminho: Path):
                 continue
 
 
+# Arquivos DESCARTÁVEIS: cache regenerável / lixo de sistema — NÃO são acervo e podem
+# ser removidos sem perda (o programa que os criou regenera). Lista conservadora, só
+# tipos inequívocos (não inclui projetos .prproj nem formatos de câmera ambíguos).
+EXT_DESCARTAVEL = {"cfa", "pek", "tmp", "temp"}          # cache de áudio/waveform do Premiere; temporários
+NOME_DESCARTAVEL = {"thumbs.db", "ehthumbs.db", "desktop.ini", ".ds_store", "icon\r"}
+
+
+def descartavel(r):
+    """True se o arquivo é cache regenerável / lixo de sistema (candidato a remover)."""
+    ext = (r.get("extensao") or "").lower()
+    nome = (r.get("nome") or "").lower()
+    return ext in EXT_DESCARTAVEL or nome in NOME_DESCARTAVEL
+
+
 def analisar(manifest_dir: Path):
     """Passada 1 (streaming): totais, volume por disco, formatos e, por SHA-256,
     quantas cópias e em quantos discos. Memória ~ nº de arquivos ÚNICOS."""
     arquivos = bytes_tot = 0
     por_disco = {}                    # disco -> [arquivos, bytes]
     formatos = Counter()              # rótulo de formato -> contagem
+    descartaveis = [0, 0]             # [contagem, bytes] de cache regenerável / lixo
     # sha -> [copias, tamanho, {discos...}]  (guarda um set pequeno de discos)
     porhash = {}
     for mf in _manifestos(manifest_dir):
@@ -138,6 +153,8 @@ def analisar(manifest_dir: Path):
             d[0] += 1; d[1] += tam
             rotulo = r.get("formato") or (("." + r["extensao"]) if r.get("extensao") else "sem extensão")
             formatos[rotulo] += 1
+            if descartavel(r):
+                descartaveis[0] += 1; descartaveis[1] += tam
             sha = r.get("sha256")
             if sha:
                 h = porhash.get(sha)
@@ -149,6 +166,7 @@ def analisar(manifest_dir: Path):
     return {
         "arquivos": arquivos, "bytes": bytes_tot,
         "por_disco": por_disco, "formatos": formatos, "porhash": porhash,
+        "descartaveis": descartaveis,
     }
 
 
@@ -157,12 +175,16 @@ def escrever_csvs(manifest_dir: Path, saida: Path, a):
     porhash = a["porhash"]
     inv = saida / "inventario_consolidado.csv"
     dup = saida / "duplicatas.csv"
+    desc = saida / "descartaveis.csv"
     with open(inv, "w", newline="", encoding="utf-8") as fi, \
-         open(dup, "w", newline="", encoding="utf-8") as fd:
+         open(dup, "w", newline="", encoding="utf-8") as fd, \
+         open(desc, "w", newline="", encoding="utf-8") as fx:
         wi = csv.DictWriter(fi, fieldnames=CAMPOS_INV); wi.writeheader()
         wd = csv.writer(fd)
         wd.writerow(["sha256", "copias", "em_n_discos", "tamanho_bytes",
                      "disco_label", "caminho"])
+        wx = csv.writer(fx)
+        wx.writerow(["disco_label", "caminho", "nome", "extensao", "tamanho_bytes", "motivo"])
         for mf in _manifestos(manifest_dir):
             for r in _linhas(mf):
                 linha = {k: r.get(k) for k in CAMPOS}
@@ -174,6 +196,10 @@ def escrever_csvs(manifest_dir: Path, saida: Path, a):
                     wd.writerow([sha, info[0], len(info[2]),
                                  r.get("tamanho_bytes"),
                                  r.get("disco_label"), r.get("caminho")])
+                if descartavel(r):
+                    wx.writerow([r.get("disco_label"), r.get("caminho"), r.get("nome"),
+                                 r.get("extensao"), r.get("tamanho_bytes"),
+                                 "cache regenerável / lixo de sistema"])
     return inv, dup
 
 
@@ -195,6 +221,10 @@ def resumir(a):
         "arquivos_redundantes": redundantes,
         "bytes_redundantes": bytes_redundantes,
         "grupos_em_2mais_discos": em_2mais_discos,
+        "descartaveis": {"arquivos": a.get("descartaveis", [0, 0])[0],
+                         "bytes": a.get("descartaveis", [0, 0])[1],
+                         "humano": humano(a.get("descartaveis", [0, 0])[1]),
+                         "observacao": "cache regenerável (.cfa/.pek) e lixo de sistema — removível sem perda"},
         "por_disco": {k: {"arquivos": v[0], "bytes": v[1]} for k, v in a["por_disco"].items()},
         "top_formatos": a["formatos"].most_common(15),
         "top_duplicatas": [{"sha256": s, "copias": c, "tamanho_bytes": tam, "discos": nd}
@@ -254,6 +284,7 @@ def escrever_dashboard(saida: Path, s):
         ("Arquivos únicos", _num(s["arquivos_unicos_por_conteudo"])),
         ("Redundantes", f'{_num(s["arquivos_redundantes"])} · {pct_red:.1f}%'),
         ("Espaço redundante", humano(s["bytes_redundantes"])),
+        ("Descartáveis (cache)", f'{_num(s["descartaveis"]["arquivos"])} · {s["descartaveis"]["humano"]}'),
     ]
     tiles_html = "\n".join(
         f'<div class="tile"><div class="tn">{v}</div><div class="tl">{html.escape(l)}</div></div>'
