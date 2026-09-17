@@ -503,38 +503,82 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
         print("(modo offline: dados so no manifesto local; defina DATABASE_URL para enviar ao dashboard)")
 
 
+def _sem_formato(r):
+    """Registro SEM identificação de formato: `puid` e `formato` ambos vazios.
+    É o estado dos discos varridos por versões antigas do .exe (sf embutido sem o
+    default.sig ao lado): hash correto, mas formato/PRONOM em branco. Se qualquer
+    um dos dois já tem valor, o arquivo foi identificado — não se re-processa."""
+    return not (r.get("puid") or r.get("formato"))
+
+
 def backfill(disco_label, raiz: Path):
-    """Completa SÓ os metadados de A/V e imagem (MediaInfo/ExifTool) dos arquivos
-    que ficaram sem eles — SEM re-hashear. Usa o manifesto já existente: para cada
-    registro com `mediainfo` vazio e extensão de mídia, localiza o arquivo no disco,
-    roda a ferramenta e atualiza o registro (manifesto local + banco). O SHA-256 e a
-    identificação de formato não são recalculados."""
+    """Completa os metadados que faltaram — SEM re-hashear:
+      • MediaInfo/ExifTool onde `mediainfo` está vazio (áudio/vídeo e imagens);
+      • Siegfried (formato/PUID) onde `puid`/`formato` ficaram vazios (discos
+        varridos por versões antigas do .exe, sem o `default.sig`).
+    Usa o manifesto já existente: para cada registro localiza o arquivo no disco,
+    roda só as ferramentas que faltam e atualiza o inventário (JSONL **e** CSV,
+    mantidos em sincronia) e o banco por upsert. O SHA-256 nunca é recalculado."""
     manifesto_json = MANIFESTOS / f"manifesto_{disco_label}.jsonl"
+    manifesto_csv = MANIFESTOS / f"manifesto_{disco_label}.csv"
     if not manifesto_json.exists():
         msg = f"Manifesto não encontrado: {manifesto_json}. Faça a varredura antes."
         _emit({"event": "erro", "msg": msg}, forcar=True)
         sys.exit(msg)
     tem_mi = ferramenta("mediainfo") is not None
     tem_et = ferramenta("exiftool") is not None
-    if not (tem_mi or tem_et):
-        msg = "Nenhuma ferramenta de metadados disponível (instale/forneça MediaInfo e ExifTool)."
+    tem_sf = ferramenta("sf") is not None
+    if not (tem_mi or tem_et or tem_sf):
+        msg = ("Nenhuma ferramenta de metadados/formato disponível "
+               "(forneça MediaInfo, ExifTool ou Siegfried).")
         _emit({"event": "erro", "msg": msg}, forcar=True)
         sys.exit(msg)
 
     db.registrar_disco(disco_label)
     _emit({"event": "phase", "fase": "identificando"}, forcar=True)
-    # Imagens: uma passada do ExifTool em LOTE (rápido); AV: MediaInfo por arquivo.
-    mapa_exif = exiftool_lote(raiz) if tem_et else {}
-    _emit({"event": "phase", "fase": "completando"}, forcar=True)
-    total = sum(1 for _ in open(manifesto_json, encoding="utf-8", errors="replace"))
-    _emit({"event": "total", "total": total}, forcar=True)
-    print(f"Completando metadados de '{disco_label}' ({total} registros)...", flush=True)
 
+    # Pré-passada única: conta os registros e detecta se ALGUM está sem formato.
+    # O Siegfried varre a árvore inteira (lê os cabeçalhos dos arquivos), então só
+    # o rodamos quando de fato há formato a preencher — senão seria uma leitura
+    # desnecessária do disco todo num backfill que só queria completar mídia.
+    total = 0
+    precisa_sf = False
+    with open(manifesto_json, encoding="utf-8", errors="replace") as f:
+        for linha in f:
+            if not linha.strip():
+                continue
+            total += 1
+            if tem_sf and not precisa_sf:
+                try:
+                    if _sem_formato(json.loads(linha)):
+                        precisa_sf = True
+                except Exception:
+                    pass
+    _emit({"event": "total", "total": total}, forcar=True)
+
+    # Imagens: ExifTool em LOTE (rápido). Formato: Siegfried em LOTE (só se faltar
+    # a algum registro). A/V: MediaInfo por arquivo, dentro do laço.
+    mapa_exif = exiftool_lote(raiz) if tem_et else {}
+    mapa_puid = siegfried_lote(raiz) if (tem_sf and precisa_sf) else {}
+
+    _emit({"event": "phase", "fase": "completando"}, forcar=True)
+    print(f"Completando metadados de '{disco_label}' ({total} registros)"
+          + ("; incluindo formato/Siegfried" if mapa_puid else "") + "...", flush=True)
+
+    # O CSV é reescrito a partir do JSONL (fonte da verdade, com todos os campos),
+    # projetando as colunas estáveis — assim CSV e JSONL nunca dessincronizam quando
+    # o formato passa a ser preenchido (puid/formato existem em ambos).
+    campos = ["disco_label", "caminho", "nome", "extensao", "tamanho_bytes",
+              "mtime", "sha256", "puid", "formato"]
     tmp = manifesto_json.with_name(manifesto_json.name + ".tmp")
-    lidos = feitos = 0
+    tmp_csv = manifesto_csv.with_name(manifesto_csv.name + ".tmp")
+    lidos = feitos_mi = feitos_sf = 0
     lote = []
     with open(manifesto_json, encoding="utf-8", errors="replace") as fin, \
-         open(tmp, "w", encoding="utf-8", buffering=1) as fout:
+         open(tmp, "w", encoding="utf-8", buffering=1) as fout, \
+         open(tmp_csv, "w", newline="", encoding="utf-8", buffering=1) as fcsv:
+        w = csv.DictWriter(fcsv, fieldnames=campos)
+        w.writeheader()
         for linha in fin:
             linha = linha.rstrip("\n")
             if not linha.strip():
@@ -545,37 +589,52 @@ def backfill(disco_label, raiz: Path):
                 fout.write(linha + "\n"); continue
             lidos += 1
             ext = (r.get("extensao") or "").lower()
-            vazio = r.get("mediainfo") in (None, {}, "")
-            if vazio and (ext in EXT_VIDEO_AUDIO or ext in EXT_IMAGEM):
-                alvo = Path(raiz) / r.get("caminho", "")
+            mudou = False
+
+            # 1) Metadados de mídia (MediaInfo / ExifTool) onde faltaram.
+            if r.get("mediainfo") in (None, {}, "") and (ext in EXT_VIDEO_AUDIO or ext in EXT_IMAGEM):
                 meta = None
                 try:
                     if ext in EXT_VIDEO_AUDIO and tem_mi:
-                        meta = mediainfo(alvo)
+                        meta = mediainfo(Path(raiz) / r.get("caminho", ""))
                     elif ext in EXT_IMAGEM and tem_et:
                         meta = mapa_exif.get(_norm(r.get("caminho", "")))
                 except Exception:
                     meta = None
                 if meta is not None:
                     r["mediainfo"] = meta
-                    feitos += 1
-                    lote.append(r)
-                    if len(lote) >= LOTE_DB:
-                        db.enviar_lote(lote); lote = []
+                    feitos_mi += 1
+                    mudou = True
+
+            # 2) Formato/PUID (Siegfried) onde faltou — sem tocar no SHA-256.
+            if mapa_puid and _sem_formato(r):
+                puid, formato = mapa_puid.get(_norm(r.get("caminho", "")), (None, None))
+                if puid or formato:
+                    r["puid"], r["formato"] = puid, formato
+                    feitos_sf += 1
+                    mudou = True
+
             fout.write(json.dumps(r, ensure_ascii=False) + "\n")
+            w.writerow({k: r.get(k) for k in campos})
+            if mudou:
+                lote.append(r)
+                if len(lote) >= LOTE_DB:
+                    db.enviar_lote(lote); lote = []
             if lidos % 200 == 0:
                 _emit({"event": "progress", "fase": "completando", "lidos": lidos,
-                       "novos": feitos, "total": total, "arquivo": r.get("caminho")},
-                      mingap=1.0)
+                       "novos": feitos_mi + feitos_sf, "total": total,
+                       "arquivo": r.get("caminho")}, mingap=1.0)
     db.enviar_lote(lote)
     os.replace(tmp, manifesto_json)
+    os.replace(tmp_csv, manifesto_csv)
     # Restaura o status do disco (registrar_disco o marcou 'varrendo' no inicio):
     # o backfill so enriquece metadados, nao deixa o disco "varrendo" para sempre.
     db.concluir_disco(disco_label)
-    _emit({"event": "done", "lidos": lidos, "novos": feitos, "total": total,
-           "online": db.conectado()}, forcar=True)
+    _emit({"event": "done", "lidos": lidos, "novos": feitos_mi + feitos_sf,
+           "total": total, "online": db.conectado()}, forcar=True)
     print(f"\nOK — backfill '{disco_label}': {lidos} verificados, "
-          f"{feitos} completados com metadados de mídia (sem re-hash).", flush=True)
+          f"{feitos_mi} com metadados de mídia + {feitos_sf} com formato (Siegfried), "
+          f"sem re-hash.", flush=True)
 
 
 def main():
@@ -587,7 +646,7 @@ def main():
     p.add_argument("--dry-run", action="store_true",
                    help="So conta arquivos/bytes e estima o tempo; nao calcula hash nem grava nada")
     p.add_argument("--backfill", action="store_true",
-                   help="So completa metadados de midia (MediaInfo/ExifTool) que faltaram, sem re-hash")
+                   help="So completa metadados (MediaInfo/ExifTool) e formato (Siegfried) que faltaram, sem re-hash")
     p.add_argument("--progress-json", action="store_true",
                    help="Emite eventos de progresso (linhas '@@PS@@ {json}') para o painel")
     a = p.parse_args()

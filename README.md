@@ -123,15 +123,25 @@ painel pode mostrar "Siegfried: ausente" mesmo com o binário presente. O `.exe`
 gerado pela CI já vem com os três embutidos quando a build consegue baixá-los.
 
 **Completar metadados que faltaram (sem re-hashear):** se um disco foi varrido
-sem MediaInfo/ExifTool, não é preciso refazer a varredura (horas de hash). Use o
-botão **"Completar metadados de mídia"** no painel, ou:
+sem MediaInfo/ExifTool — **ou por uma versão antiga do `.exe` que rodava o
+Siegfried sem o `default.sig`** (hash correto, mas o campo **formato/PRONOM** em
+branco) — não é preciso refazer a varredura (horas de hash). Use o botão
+**"Completar metadados"** no painel, ou:
 
 ```bash
 python scanner/scan.py --disco "TRANSPORTE A" --raiz F:\ --backfill
 ```
 
-Ele percorre o manifesto, roda só as ferramentas de mídia nos arquivos que ainda
-não têm metadados e atualiza o manifesto e o banco — **sem recalcular o SHA-256**.
+Ele percorre o manifesto e, **sem recalcular o SHA-256**:
+
+- roda **MediaInfo/ExifTool** nos arquivos de mídia que ainda não têm metadados;
+- roda o **Siegfried** para preencher o **formato/PUID** só onde ficou vazio (o que
+  já foi identificado não é reprocessado; arquivo sem correspondência continua vazio,
+  nunca inventado).
+
+Atualiza o manifesto (**CSV e JSONL, mantidos em sincronia**) e o banco por upsert.
+O Siegfried só é acionado quando há de fato formato a preencher — senão o backfill
+não relê a árvore à toa.
 
 ## Relatório local (sem banco, sem custo)
 

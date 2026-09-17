@@ -70,7 +70,7 @@
         <button type="submit" class="btn" disabled title="Aguarde a operação atual terminar">▶ Operação em andamento…</button>
       {% else %}
         <button type="submit" class="btn">▶ Iniciar varredura</button>
-        <button type="submit" class="btn ghost" formaction="/backfill" title="Completa só os metadados de áudio/vídeo/imagem que faltaram, sem re-varrer">＋ Completar metadados (sem re-varrer)</button>
+        <button type="submit" class="btn ghost" formaction="/backfill" title="Completa metadados de áudio/vídeo/imagem (MediaInfo/ExifTool) e o formato/PRONOM (Siegfried) que faltaram, sem re-varrer nem re-hashear">＋ Completar metadados (sem re-varrer)</button>
       {% endif %}
       </div>
     </form>
