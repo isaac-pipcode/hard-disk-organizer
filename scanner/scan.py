@@ -401,18 +401,36 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
             if not (anexar and csv_ja_tem_cabecalho):
                 w.writeheader()
 
-            for dirpath, dirs, files in os.walk(raiz):
+            def _falha(alvo, e):
+                # Falha de leitura NUNCA derruba a varredura nem some em silêncio:
+                # conta, registra no log e segue. Ao fim, "N com falha de leitura"
+                # avisa que o disco não foi lido por inteiro (re-rodar retoma).
+                nonlocal erros
+                erros += 1
+                msg = f"{type(e).__name__}: {e}"
+                print(f"  AVISO: falha ao ler '{alvo}' ({msg}); pulando.", flush=True)
+                _emit({"event": "aviso_arquivo", "arquivo": str(alvo), "erro": msg},
+                      forcar=True)
+
+            # onerror: pasta que não pode ser listada (setor defeituoso, permissão)
+            # antes era pulada em silêncio — todo o conteúdo dela sumia do inventário.
+            for dirpath, dirs, files in os.walk(
+                    raiz, onerror=lambda e: _falha(getattr(e, "filename", "?"), e)):
                 dirs[:] = [d for d in dirs if not _pular_dir(d)]
                 for nome in files:
                     if _pular_arquivo(nome):
                         continue
                     caminho_abs = Path(dirpath) / nome
-                    if caminho_abs.is_symlink() or not caminho_abs.is_file():
-                        continue
                     rel = str(caminho_abs.relative_to(raiz))
+                    # is_symlink/is_file/stat consultam o disco: num setor defeituoso
+                    # levantam OSError (ex.: WinError 23 -> errno 22) que, sem este
+                    # try, abortava a varredura INTEIRA — sempre no mesmo arquivo.
                     try:
+                        if caminho_abs.is_symlink() or not caminho_abs.is_file():
+                            continue
                         st = caminho_abs.stat()
-                    except OSError:
+                    except OSError as e:
+                        _falha(rel, e)
                         continue
                     lidos += 1
 
@@ -445,11 +463,7 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
                         else:
                             meta = None
                     except Exception as e:
-                        erros += 1
-                        msg = f"{type(e).__name__}: {e}"
-                        print(f"  AVISO: falha ao ler '{rel}' ({msg}); pulando.", flush=True)
-                        _emit({"event": "aviso_arquivo", "arquivo": rel, "erro": msg},
-                              forcar=True)
+                        _falha(rel, e)
                         continue
 
                     linha = {
