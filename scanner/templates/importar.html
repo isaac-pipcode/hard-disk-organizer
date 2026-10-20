@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block titulo %}Importar manifestos — PRESERVA-SCAN{% endblock %}
+{% block conteudo %}
+  <h1>Importar manifestos</h1>
+  <p class="lede">Traga para esta máquina os manifestos de discos varridos em <b>outros computadores</b>.
+     Depois de importados, entram no relatório, na deduplicação, no espelhamento e no mapa entre discos
+     como se tivessem sido varridos aqui. Não toca em nenhum disco do acervo.</p>
+
+  {% if erro %}<div class="aviso a-err">⚠️ {{ erro }}</div>{% endif %}
+
+  {% if resultado %}
+    {% set conflitos = resultado.discos | selectattr("situacao", "equalto", "conflito") | list %}
+    {% set novos = resultado.discos | selectattr("situacao", "in", ["importado", "substituido"]) | list %}
+    {% if novos %}<div class="aviso a-ok">✅ {{ novos|length }} disco(s) importado(s).
+      <a href="/passo/relatorio">Seguir para o relatório →</a></div>{% endif %}
+    {% if conflitos %}<div class="aviso a-err">⚠️ {{ conflitos|length }} disco(s) <b>já existem aqui com conteúdo
+      diferente</b> e não foram alterados. Pode ser outra varredura do mesmo disco — ou dois discos diferentes
+      com a mesma etiqueta. Confira antes de marcar “substituir”.</div>{% endif %}
+    {% for e in resultado.erros %}<div class="aviso a-err">⚠️ {{ e }}</div>{% endfor %}
+    <div class="card pad0">
+      <table>
+        <tr><th>Disco</th><th>Situação</th><th>Registros</th><th>Volume</th><th>Observações</th></tr>
+        {% for d in resultado.discos %}
+        <tr>
+          <td><b>{{ d.disco }}</b><br><span class="muted" style="font-size:.78rem">{{ d.arquivo }}</span></td>
+          <td>{% if d.situacao == "importado" %}<span class="fbadge ok">importado</span>
+              {% elif d.situacao == "substituido" %}<span class="fbadge ok">substituído</span>
+              {% elif d.situacao == "identico" %}<span class="fbadge">já estava aqui</span>
+              {% else %}<span class="fbadge no">conflito</span>{% endif %}</td>
+          <td>{{ "{:,}".format(d.registros).replace(",", ".") }}</td>
+          <td>{{ humano(d.bytes) }}</td>
+          <td style="font-size:.82rem">
+            {% if d.origem != "jsonl" %}veio só o CSV: sem metadados de mídia.<br>{% endif %}
+            {% if d.sem_hash %}{{ d.sem_hash }} sem hash.<br>{% endif %}
+            {% if d.sem_formato %}{{ d.sem_formato }} sem formato (use “Completar metadados”).<br>{% endif %}
+            {% if d.linhas_invalidas %}{{ d.linhas_invalidas }} linha(s) corrompida(s) descartada(s).<br>{% endif %}
+            {% if d.repetidos %}{{ d.repetidos }} registro(s) repetido(s) consolidado(s).<br>{% endif %}
+            {% if d.backup %}antigo guardado em <code>{{ d.backup }}</code>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <form method="post" action="/importar" enctype="multipart/form-data">
+      <div class="campo">
+        <label for="arquivos">Arquivos de manifesto</label>
+        <span class="ajuda">Selecione vários de uma vez: <code>manifesto_&lt;disco&gt;.jsonl</code> (preferido),
+          <code>.csv</code> ou um <code>.zip</code> com eles. Se vierem o .jsonl e o .csv do mesmo disco, vale o .jsonl.</span>
+        <input id="arquivos" type="file" name="arquivos" multiple accept=".jsonl,.csv,.zip">
+      </div>
+      <details class="avancado">
+        <summary>…ou importar de uma pasta deste computador (pendrive, HD)</summary>
+        <div class="campo">
+          <label for="origem">Pasta com os manifestos <span class="opc">(procura em subpastas e dentro de .zip)</span></label>
+          <input id="origem" name="origem" placeholder="E:\manifestos">
+        </div>
+      </details>
+      <div class="campo" style="margin-top:1rem">
+        <label style="font-weight:400"><input type="checkbox" name="substituir" value="1" style="width:auto">
+          Substituir discos que já existem aqui com conteúdo diferente
+          <span class="opc">(o manifesto antigo é guardado em <code>_substituidos/</code>)</span></label>
+      </div>
+      <div class="btn-row"><button class="btn" type="submit">📥 Importar</button></div>
+    </form>
+    <p class="ajuda" style="margin-top:1rem">Destino: <code>{{ pasta }}</code>.
+      A etiqueta do disco é lida do conteúdo do manifesto, não do nome do arquivo.</p>
+  </div>
+
+  {% if existentes %}
+  <h2>Discos já disponíveis aqui ({{ existentes|length }})</h2>
+  <p class="muted" style="font-size:.88rem">{{ existentes|join(" · ") }}</p>
+  {% endif %}
+{% endblock %}

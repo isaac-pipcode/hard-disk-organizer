@@ -14,11 +14,14 @@ import time
 import html
 import string
 import platform
+import shutil
 import threading
 import contextlib
 from pathlib import Path
 
-from fastapi import FastAPI, Form
+from typing import List
+
+from fastapi import FastAPI, Form, File, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
@@ -30,6 +33,7 @@ import dedup      # planeja a deduplicação (fase 2) a partir dos manifestos
 import espelhamento  # planeja o espelhamento / compra de discos (fase 2)
 import consolidado   # visão entre discos: o que está repetido onde (fase 2)
 import executar       # execução guiada e segura da limpeza (fase 2)
+import importar       # traz manifestos varridos em outras máquinas
 
 
 def _recurso(rel):
@@ -365,6 +369,49 @@ def backfill(disco: str = Form(...), raiz: str = Form(...), subpasta: str = Form
                      args=(disco.strip(), caminho, grupo.strip() or None, "backfill"),
                      daemon=True).start()
     return RedirectResponse(url="/acompanhar", status_code=303)
+
+
+def _tela_importar(request, resultado=None, erro=None, status_code=200):
+    return templates.TemplateResponse(request, "importar.html", _ctx(
+        ativo="importar", resultado=resultado, erro=erro, pasta=str(MANIFEST_DIR),
+        existentes=sorted(p.stem[len("manifesto_"):] for p in MANIFEST_DIR.glob("manifesto_*.jsonl")),
+    ), status_code=status_code)
+
+
+@app.get("/passo/importar", response_class=HTMLResponse)
+def passo_importar(request: Request):
+    return _tela_importar(request)
+
+
+@app.post("/importar", response_class=HTMLResponse)
+def importar_manifestos(request: Request, arquivos: List[UploadFile] = File(default=[]),
+                        origem: str = Form(""), substituir: str = Form("")):
+    """Traz manifestos de outra máquina: arquivos enviados (.jsonl/.csv/.zip) ou uma
+    pasta desta máquina (ex.: pendrive). Rota síncrona: roda no threadpool."""
+    if _rodando():
+        return _tela_importar(request, erro="Há uma varredura em andamento — importe "
+                              "quando ela terminar.", status_code=409)
+    enviados = [a for a in arquivos if a.filename]
+    try:
+        if enviados:
+            # Grava os uploads numa pasta temporária e importa dela: assim a leitura
+            # é sob demanda (um disco por vez), como na importação de pasta.
+            import tempfile
+            with tempfile.TemporaryDirectory(dir=MANIFEST_DIR.parent) as tmp:
+                for a in enviados:
+                    destino = Path(tmp) / os.path.basename(a.filename.replace("\\", "/"))
+                    with open(destino, "wb") as f:
+                        shutil.copyfileobj(a.file, f)
+                res = importar.importar_de(tmp, MANIFEST_DIR, substituir=bool(substituir))
+        elif origem.strip():
+            res = importar.importar_de(origem.strip().strip('"'), MANIFEST_DIR,
+                                       substituir=bool(substituir))
+        else:
+            return _tela_importar(request, erro="Escolha os arquivos ou informe uma pasta.",
+                                  status_code=400)
+    except (FileNotFoundError, ValueError) as e:
+        return _tela_importar(request, erro=str(e), status_code=400)
+    return _tela_importar(request, resultado=res)
 
 
 @app.get("/acompanhar", response_class=HTMLResponse)

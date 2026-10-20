@@ -143,6 +143,27 @@ Atualiza o manifesto (**CSV e JSONL, mantidos em sincronia**) e o banco por upse
 O Siegfried só é acionado quando há de fato formato a preencher — senão o backfill
 não relê a árvore à toa.
 
+## Importar manifestos de outras máquinas
+
+Quando os discos foram varridos em **computadores diferentes**, as etapas de análise
+(relatório, deduplicação, espelhamento, mapa entre discos, execução) só enxergam o que
+está na pasta `manifestos/` **desta** máquina. Para juntá-los: no painel, menu
+**"Importar manifestos"** — selecione os `manifesto_<disco>.jsonl` (ou `.csv`, ou um
+`.zip` com eles), ou aponte uma pasta (ex.: o pendrive). Pela linha de comando:
+
+```bash
+python scanner/importar.py --origem E:\manifestos --manifestos ./manifestos
+```
+
+- A etiqueta do disco vem do **conteúdo** do manifesto, não do nome do arquivo.
+- Prefira o `.jsonl`: o `.csv` sozinho é aceito, mas não traz os metadados de mídia.
+- Linhas corrompidas (última linha cortada) são descartadas **e contadas**; registros
+  repetidos do mesmo caminho ficam só com o mais recente.
+- Disco que já existe aqui com conteúdo **diferente** não é sobrescrito (pode ser
+  outra passada — ou dois discos com a mesma etiqueta). Com **"substituir"**
+  (`--substituir`), o antigo vai para `manifestos/_substituidos/<data>/`.
+- A importação é local: não envia ao banco.
+
 ## Relatório local (sem banco, sem custo)
 
 A partir dos manifestos já varridos, o sistema gera um **relatório do acervo** —
