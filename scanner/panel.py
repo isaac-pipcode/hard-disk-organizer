@@ -83,6 +83,8 @@ def _job_inicial():
         "ultimo_evento_em": None, "fim_em": None,
         "erro_msg": None, "returncode": None,
         "avisos": [], "log_path": None, "retomados": 0,
+        # fase de identificação (Siegfried em lotes / ExifTool): progresso próprio
+        "ident_etapa": None, "ident_feitos": 0, "ident_total": 0,
     }
 
 
@@ -185,6 +187,11 @@ def _aplicar_evento(ev):
             if ev.get(k) is not None:
                 JOB[k] = ev[k]
         JOB["arquivo"] = ev.get("arquivo")
+    elif tipo == "identificando":
+        JOB["ident_etapa"] = ev.get("etapa", JOB["ident_etapa"])
+        if ev.get("total") is not None:
+            JOB["ident_feitos"] = ev.get("feitos", 0)
+            JOB["ident_total"] = ev["total"]
     elif tipo == "aviso_arquivo":
         avisos = JOB["avisos"]
         avisos.append({"arquivo": ev.get("arquivo"), "erro": ev.get("erro")})
@@ -438,6 +445,8 @@ def status():
         "parado_ha": round(parado_ha), "travado": travado,
         "erro_msg": JOB["erro_msg"], "avisos": JOB["avisos"],
         "retomados": JOB["retomados"], "online": db.conectado(),
+        "ident_etapa": JOB["ident_etapa"], "ident_feitos": JOB["ident_feitos"],
+        "ident_total": JOB["ident_total"],
     })
 
 

@@ -41,7 +41,7 @@ def verificar():
             scan.Path.is_file = is_file_com_defeito
             scan.os.walk = walk_com_pasta_ilegivel
             scan.CALLBACK = eventos.append
-            scan.siegfried_lote = lambda r: {}
+            scan.siegfried_lote = lambda r, **kw: {}
             scan.exiftool_lote = lambda r: {}
             scan.mediainfo = lambda c: None
             abortou = False
