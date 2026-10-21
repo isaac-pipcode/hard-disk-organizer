@@ -65,7 +65,7 @@ def verificar():
         try:
             scan.MANIFESTOS = man
             scan.ferramenta = lambda nome: "sf-fake" if nome == "sf" else None
-            scan.siegfried_lote = lambda raiz: MAPA_SF
+            scan.siegfried_lote = lambda raiz, **kw: MAPA_SF
             scan.backfill("HDX", Path(td))
         finally:
             scan.MANIFESTOS, scan.ferramenta, scan.siegfried_lote = orig_mani, orig_ferr, orig_sf

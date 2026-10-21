@@ -84,7 +84,7 @@
 const FASES = {
   ocioso:        "Aguardando início…",
   contando:      "Contando arquivos do disco (preparando a barra)…",
-  identificando: "Identificando formatos e metadados de imagem — pode levar alguns minutos, sem barra…",
+  identificando: "Identificando formatos dos arquivos…",
   varrendo:      "Varrendo: calculando checksum e lendo metadados…",
   completando:   "Completando metadados (MediaInfo/ExifTool) e formato (Siegfried), sem re-hash…",
   concluido:     "Concluído com sucesso.",
@@ -149,13 +149,22 @@ async function tick(){
       ". Pode ser um travamento — confira se o disco continua conectado e se o cabo/USB não caiu.";
   } else {
     btxt.textContent = FASES[s.estado] || "Trabalhando…";
+    if(s.estado === "identificando"){
+      if(s.ident_etapa === "imagens")
+        btxt.textContent = "Lendo metadados das imagens (ExifTool) — sem barra, costuma ser rápido…";
+      else if(s.ident_total)
+        btxt.textContent = "Identificando formatos (Siegfried): " + num(s.ident_feitos) +
+          " de " + num(s.ident_total) + " arquivos — antes do checksum…";
+    }
   }
 
   // ---- Barra e porcentagem ----
   const barra = document.getElementById("barra");
   const barraIn = document.getElementById("barra-in");
   const pct = document.getElementById("pct");
-  let indef = (s.estado === "contando" || s.estado === "identificando" || !s.total);
+  // Identificando formatos: barra real (lotes concluídos do Siegfried).
+  const identBarra = (s.estado === "identificando" && s.ident_etapa !== "imagens" && s.ident_total > 0);
+  let indef = !identBarra && (s.estado === "contando" || s.estado === "identificando" || !s.total);
 
   if(s.estado === "concluido"){
     indef=false; barraIn.style.width="100%"; pct.textContent="100%";
@@ -163,7 +172,8 @@ async function tick(){
     barra.classList.add("barra-indef"); pct.textContent = s.estado==="contando" ? "…" : "";
   } else {
     barra.classList.remove("barra-indef");
-    let p = s.total ? Math.min(100, (s.lidos/s.total)*100) : 0;
+    let p = identBarra ? Math.min(100, (s.ident_feitos/s.ident_total)*100)
+                       : (s.total ? Math.min(100, (s.lidos/s.total)*100) : 0);
     barraIn.style.width = p.toFixed(1)+"%";
     pct.textContent = p.toFixed(1)+"%";
   }

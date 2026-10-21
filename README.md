@@ -122,6 +122,15 @@ arquivo de assinaturas `default.sig`** (gere-o uma vez com `sf -update`); sem o
 painel pode mostrar "Siegfried: ausente" mesmo com o binário presente. O `.exe`
 gerado pela CI já vem com os três embutidos quando a build consegue baixá-los.
 
+**Identificação de formato rápida e à prova de travamento:** o `.exe` embute uma
+assinatura do Siegfried que examina só o **primeiro e o último 1 MiB** de cada
+arquivo (detalhes e validação em [`packaging/siegfried/README.md`](packaging/siegfried/README.md)).
+A assinatura padrão (`sf -update`) lia cada vídeo **inteiro**, e a fase
+"Identificando formatos" relia o HD todo antes do checksum, levando horas sem
+progresso. A identificação roda em **lotes**: o painel mostra "N de M arquivos",
+e um arquivo que trave o Siegfried (setor defeituoso) é isolado e pulado sem
+parar a varredura. O ExifTool também tem tempo-limite.
+
 **Completar metadados que faltaram (sem re-hashear):** se um disco foi varrido
 sem MediaInfo/ExifTool — **ou por uma versão antiga do `.exe` que rodava o
 Siegfried sem o `default.sig`** (hash correto, mas o campo **formato/PRONOM** em

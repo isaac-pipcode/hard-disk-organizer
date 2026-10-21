@@ -143,49 +143,158 @@ def sha256_de(caminho: Path, pulso=None) -> str:
     return h.hexdigest()
 
 
-def siegfried_lote(raiz: Path):
-    """Roda o Siegfried UMA vez sobre a arvore inteira (rapido) e devolve
-    {caminho_relativo: (puid, formato)}. Substitui a chamada por-arquivo, que
-    nao escala: 125 mil arquivos = 125 mil processos. Em lote = 1 processo."""
-    sf = ferramenta("sf")
-    if not sf:
-        print("AVISO: 'sf' (Siegfried) nao encontrado; seguindo sem identificacao de formato.")
-        return {}
-    # O Siegfried precisa do arquivo de assinaturas (default.sig). Numa instalacao
-    # nativa (Scoop/choco) ele fica em SIEGFRIED_HOME/AppData; quando o 'sf.exe' vem
-    # EMBUTIDO no .exe, empacotamos o 'default.sig' ao lado dele — entao apontamos
-    # SIEGFRIED_HOME para essa pasta. Sem isso, o sf embutido roda mas nao identifica
-    # nada (campo "formato" fica vazio). Se o .sig nao estiver junto, deixamos o sf
-    # usar o proprio HOME (instalacao nativa), preservando o funcionamento.
+# Siegfried em LOTES (via `sf -f lista`), e não numa passada única sobre a árvore:
+#  - cada lote concluído vira progresso real no painel (antes: horas de "0 lidos");
+#  - um lote que estoura o tempo é refeito arquivo a arquivo, isolando só o arquivo
+#    que travou o sf (setor defeituoso) sem perder a identificação dos demais;
+#  - a lista já sai filtrada (sem Lixeira / System Volume Information).
+# Com a assinatura do .exe (limitada a 1 MiB do início e do fim de cada arquivo,
+# como o DROID), identificar um vídeo de 4 GiB leva ~0,2 s; sem o limite, o sf lê
+# o arquivo INTEIRO — no HD todo, uma leitura completa do disco só para formato.
+SF_LOTE = 200               # arquivos por processo do sf
+SF_TEMPO_LOTE = 600         # s: lote que não termina nisso tem arquivo travado
+SF_TEMPO_ARQUIVO = 120      # s: limite por arquivo quando o lote é refeito um a um
+SF_MAX_TRAVADOS = 5         # mais que isso = disco degradando: interrompe a identificação
+EXIF_TEMPO_BASE = 900       # s: ExifTool em lote — tempo-limite = base + por imagem
+EXIF_TEMPO_POR_IMAGEM = 2
+
+
+def _sf_env(sf):
+    """Ambiente do sf. O Siegfried precisa do arquivo de assinaturas (default.sig):
+    quando o sf.exe vem EMBUTIDO no .exe, o default.sig está ao lado dele — então
+    apontamos SIEGFRIED_HOME para essa pasta (sem isso o sf roda mas não identifica
+    nada). Sem .sig ao lado, o sf usa o próprio HOME (instalação nativa)."""
     env = os.environ.copy()
     if not env.get("SIEGFRIED_HOME"):
         sig_local = Path(sf).parent / "default.sig"
         if sig_local.exists():
             env["SIEGFRIED_HOME"] = str(Path(sf).parent)
-    mapa = {}
+    return env
+
+
+def _sf_limitado(sf, env):
+    """True se a assinatura em uso limita a leitura (max BOF/EOF) — a do .exe limita.
+    Uma assinatura sem limite (ex.: `sf -update` numa instalação nativa) lê cada
+    arquivo inteiro, e então os tempos-limite precisam ser bem mais folgados."""
     try:
-        import tempfile
-        fd, tmp = tempfile.mkstemp(suffix=".json")
-        os.close(fd)
-        with open(tmp, "w", encoding="utf-8") as out:
-            subprocess.run([sf, "-json", str(raiz)], stdout=out,
-                           stderr=subprocess.DEVNULL, check=False, env=env)
-        with open(tmp, encoding="utf-8") as f:
-            data = json.load(f)
-        os.unlink(tmp)
-        for entry in data.get("files", []):
-            fn = entry.get("filename")
-            if not fn:
-                continue
+        r = subprocess.run([sf, "-version"], capture_output=True, encoding="utf-8",
+                           errors="replace", timeout=60, env=env)
+        return "max BOF" in (r.stdout + r.stderr)
+    except Exception:
+        return False
+
+
+def _listar_arquivos(raiz: Path):
+    """Arquivos sob `raiz`, com os mesmos filtros da varredura (sem pastas de sistema
+    e lixo). Não consulta o disco além da listagem: o sf reporta o que não abrir."""
+    lista = []
+    for dirpath, dirs, files in os.walk(raiz):
+        # ordem alfabética: determinística em qualquer sistema (o NTFS já lista
+        # assim; no Linux a ordem do os.walk é arbitrária)
+        dirs[:] = sorted(d for d in dirs if not _pular_dir(d))
+        lista += [str(Path(dirpath) / n) for n in sorted(files) if not _pular_arquivo(n)]
+    return lista
+
+
+def _sf_rodar(sf, env, caminhos, timeout):
+    """Identifica `caminhos` num único processo do sf (`-csv -f lista`). Devolve
+    {caminho: (puid, formato)}, ou None se o sf estourou `timeout` ou falhou."""
+    import tempfile
+    fd, lista = tempfile.mkstemp(suffix=".txt"); os.close(fd)
+    fd, saida = tempfile.mkstemp(suffix=".csv"); os.close(fd)
+    try:
+        with open(lista, "w", encoding="utf-8", newline="\n") as f:
+            f.write("\n".join(caminhos) + "\n")
+        with open(saida, "wb") as out:
+            p = subprocess.Popen([sf, "-csv", "-f", lista], stdout=out,
+                                 stderr=subprocess.DEVNULL, env=env)
             try:
-                rel = _norm(Path(fn).relative_to(raiz))
-            except Exception:
-                rel = _norm(fn)
-            matches = entry.get("matches") or []
-            if matches:
-                mapa[rel] = (matches[0].get("id"), matches[0].get("format"))
-    except Exception as e:
-        print(f"AVISO: Siegfried em lote falhou ({e}); seguindo sem PUID.")
+                p.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                p.kill(); p.wait()
+                return None
+        pedidos = {_norm(c): c for c in caminhos}
+        res = {}
+        with open(saida, encoding="utf-8", errors="replace", newline="") as f:
+            for r in csv.DictReader(f):
+                c = pedidos.get(_norm(r.get("filename") or ""))
+                if c and c not in res and r.get("id"):
+                    res[c] = (r.get("id"), r.get("format"))
+        if not res and p.returncode != 0:
+            return None
+        return res
+    except Exception:
+        return None
+    finally:
+        for t in (lista, saida):
+            try:
+                os.unlink(t)
+            except OSError:
+                pass
+
+
+def _progresso_identificacao(feitos, total):
+    """Batimento da fase de identificação: o painel mostra 'N de M' e uma barra real."""
+    _emit({"event": "identificando", "etapa": "formatos", "feitos": feitos,
+           "total": total}, forcar=(feitos in (0, total)), mingap=1.0)
+
+
+def siegfried_lote(raiz: Path, progresso=None):
+    """Identifica o formato (PRONOM) de todos os arquivos sob `raiz` e devolve
+    {caminho_relativo: (puid, formato)}. Roda em lotes com tempo-limite (veja acima):
+    nunca trava a varredura, e `progresso(feitos, total)` alimenta a barra do painel."""
+    sf = ferramenta("sf")
+    if not sf:
+        print("AVISO: 'sf' (Siegfried) nao encontrado; seguindo sem identificacao de formato.")
+        return {}
+    env = _sf_env(sf)
+    limitado = _sf_limitado(sf, env)
+    # Assinatura sem limite lê arquivos inteiros: tempos-limite folgados para não
+    # confundir um vídeo grande com um arquivo travado.
+    t_lote = SF_TEMPO_LOTE if limitado else 6 * 3600
+    t_arq = SF_TEMPO_ARQUIVO if limitado else 3600
+    arquivos = _listar_arquivos(raiz)
+    total = len(arquivos)
+    achados, travados = {}, []
+    if progresso:
+        progresso(0, total)
+    for i in range(0, total, SF_LOTE):
+        lote = arquivos[i:i + SF_LOTE]
+        res = _sf_rodar(sf, env, lote, t_lote)
+        if res is None:
+            # Algum arquivo do lote travou o sf (setor defeituoso): refaz um a um,
+            # com limite por arquivo, para isolar só o culpado.
+            for c in lote:
+                r1 = _sf_rodar(sf, env, [c], t_arq)
+                if r1 is None:
+                    travados.append(c)
+                    msg = "Siegfried nao respondeu (possivel setor defeituoso)"
+                    print(f"  AVISO: formato nao identificado em '{c}' ({msg}).", flush=True)
+                    _emit({"event": "aviso_arquivo", "arquivo": c, "erro": msg}, forcar=True)
+                    if len(travados) > SF_MAX_TRAVADOS:
+                        break
+                else:
+                    achados.update(r1)
+        else:
+            achados.update(res)
+        if progresso:
+            progresso(min(i + len(lote), total), total)
+        if len(travados) > SF_MAX_TRAVADOS:
+            print(f"AVISO: {len(travados)} arquivos travaram o Siegfried — o disco parece "
+                  "estar se degradando. Identificacao de formato interrompida; o restante "
+                  "segue sem formato. Recomenda-se CLONAR o disco antes de novas leituras.",
+                  flush=True)
+            _emit({"event": "aviso_arquivo", "arquivo": str(raiz),
+                   "erro": "muitos arquivos travaram o Siegfried: identificacao interrompida"},
+                  forcar=True)
+            break
+    mapa = {}
+    for c, v in achados.items():
+        try:
+            rel = _norm(Path(c).relative_to(raiz))
+        except Exception:
+            rel = _norm(c)
+        mapa[rel] = v
     return mapa
 
 
@@ -226,6 +335,28 @@ def exiftool(caminho: Path):
         return None
 
 
+def _json_parcial(texto):
+    """Lê a lista JSON do ExifTool mesmo truncada (processo morto no meio): devolve
+    os objetos completos que conseguir, descartando só o último pedaço incompleto."""
+    texto = (texto or "").strip()
+    if not texto:
+        return []
+    try:
+        return json.loads(texto)
+    except Exception:
+        pass
+    dec, objs = json.JSONDecoder(), []
+    i = texto.find("{")
+    while i != -1:
+        try:
+            obj, j = dec.raw_decode(texto, i)
+        except ValueError:
+            break
+        objs.append(obj)
+        i = texto.find("{", j)
+    return objs
+
+
 def exiftool_lote(raiz: Path):
     """Roda o ExifTool UMA vez sobre a árvore, só nas extensões de imagem, e devolve
     {caminho_relativo: metadados}. Evita o custo de subir o processo do ExifTool
@@ -238,11 +369,27 @@ def exiftool_lote(raiz: Path):
     for e in sorted(EXT_IMAGEM):
         args += ["-ext", e]
     args.append(str(raiz))
+    # Tempo-limite proporcional ao nº de imagens: num setor defeituoso o ExifTool
+    # pode travar para sempre (antes não havia limite). Estourou: mata o processo e
+    # aproveita o que ele já tinha produzido; o resto fica para "Completar metadados".
+    n_img = sum(1 for _, _, fs in os.walk(raiz) for n in fs
+                if n.rsplit(".", 1)[-1].lower() in EXT_IMAGEM)
+    if not n_img:
+        return {}
     mapa = {}
     try:
-        r = subprocess.run(args, capture_output=True, encoding="utf-8",
-                           errors="replace")   # UTF-8 explícito; sem timeout: passada única
-        data = json.loads(r.stdout) if r.stdout.strip() else []
+        try:
+            r = subprocess.run(args, capture_output=True, encoding="utf-8",
+                               errors="replace",   # UTF-8 explícito
+                               timeout=EXIF_TEMPO_BASE + EXIF_TEMPO_POR_IMAGEM * n_img)
+            saida = r.stdout
+        except subprocess.TimeoutExpired as e:
+            saida = e.stdout or ""
+            if isinstance(saida, bytes):
+                saida = saida.decode("utf-8", errors="replace")
+            print("AVISO: ExifTool excedeu o tempo-limite (possivel setor defeituoso); "
+                  "usando os metadados de imagem lidos ate ali.", flush=True)
+        data = _json_parcial(saida)
         for obj in data:
             src = obj.get("SourceFile")
             if not src:
@@ -366,9 +513,10 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
               forcar=True)
 
     _emit({"event": "phase", "fase": "identificando"}, forcar=True)
-    print("Identificando formatos (Siegfried) e metadados de imagem (ExifTool), "
-          "uma passada na arvore...", flush=True)
-    mapa_puid = siegfried_lote(raiz)
+    print("Identificando formatos (Siegfried, em lotes) e metadados de imagem "
+          "(ExifTool)...", flush=True)
+    mapa_puid = siegfried_lote(raiz, progresso=_progresso_identificacao)
+    _emit({"event": "identificando", "etapa": "imagens"}, forcar=True)
     mapa_exif = exiftool_lote(raiz)
 
     _emit({"event": "phase", "fase": "varrendo"}, forcar=True)
@@ -572,8 +720,11 @@ def backfill(disco_label, raiz: Path):
 
     # Imagens: ExifTool em LOTE (rápido). Formato: Siegfried em LOTE (só se faltar
     # a algum registro). A/V: MediaInfo por arquivo, dentro do laço.
+    mapa_puid = (siegfried_lote(raiz, progresso=_progresso_identificacao)
+                 if (tem_sf and precisa_sf) else {})
+    if tem_et:
+        _emit({"event": "identificando", "etapa": "imagens"}, forcar=True)
     mapa_exif = exiftool_lote(raiz) if tem_et else {}
-    mapa_puid = siegfried_lote(raiz) if (tem_sf and precisa_sf) else {}
 
     _emit({"event": "phase", "fase": "completando"}, forcar=True)
     print(f"Completando metadados de '{disco_label}' ({total} registros)"

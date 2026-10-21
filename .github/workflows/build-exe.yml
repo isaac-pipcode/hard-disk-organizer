@@ -49,8 +49,8 @@ jobs:
           # Siegfried: NÃO existe pacote no Chocolatey — baixamos o release oficial do
           # GitHub. Além do 'sf.exe', o scanner precisa do arquivo de assinaturas
           # 'default.sig' AO LADO do binário (o scan aponta SIEGFRIED_HOME para a pasta
-          # das ferramentas quando encontra o .sig ali). 'sf -update' baixa o .sig para
-          # a pasta indicada por SIEGFRIED_HOME. Preferimos o build 'win64_static'
+          # das ferramentas quando encontra o .sig ali). O .sig vem versionado em
+          # packaging/siegfried/ (limitado a 1 MiB). Preferimos o build 'win64_static'
           # (sem dependência de DLL do MSVC), com fallback para 'win64'.
           try {
             $apiHead = @{ "User-Agent" = "preservascan-ci"; "Authorization" = "Bearer $env:GITHUB_TOKEN" }
@@ -64,11 +64,24 @@ jobs:
               if ($sfbin) {
                 Copy-Item $sfbin.FullName packaging/ferramentas/
                 $env:SIEGFRIED_HOME = (Resolve-Path packaging/ferramentas).Path
-                & "packaging/ferramentas/sf.exe" -update
-                if (Test-Path "packaging/ferramentas/default.sig") {
-                  Write-Host "Siegfried OK: sf.exe + default.sig ($($rel.tag_name), asset $($asset.name))"
+                # Assinatura LIMITADA a 1 MiB do início/fim de cada arquivo (ver
+                # packaging/siegfried/README.md). A do 'sf -update' lê cada vídeo
+                # INTEIRO: a fase "Identificando formatos" lia o HD todo antes do hash.
+                Copy-Item packaging/siegfried/default.sig packaging/ferramentas/default.sig -Force
+                $ver = & "packaging/ferramentas/sf.exe" -version 2>&1 | Out-String
+                if ($ver -match "max BOF 1048576") {
+                  Write-Host "Siegfried OK: sf.exe ($($rel.tag_name), asset $($asset.name)) + default.sig LIMITADO (1 MiB)"
                 } else {
-                  Write-Host "AVISO: sf.exe copiado mas default.sig nao baixou (sf roda sem identificar formato)"
+                  # Fallback: assinatura padrão (sem limite). O scanner continua
+                  # funcionando (lotes com tempo-limite folgado), só mais devagar.
+                  Write-Host "AVISO: sf.exe $($rel.tag_name) nao carregou a assinatura limitada -- usando 'sf -update'. Saida: $ver"
+                  Remove-Item packaging/ferramentas/default.sig -Force -ErrorAction SilentlyContinue
+                  & "packaging/ferramentas/sf.exe" -update
+                  if (Test-Path "packaging/ferramentas/default.sig") {
+                    Write-Host "Siegfried OK (sem limite): sf.exe + default.sig do sf -update"
+                  } else {
+                    Write-Host "AVISO: default.sig nao disponivel (sf roda sem identificar formato)"
+                  }
                 }
               } else { Write-Host "AVISO: sf.exe nao encontrado no zip do Siegfried" }
             } else { Write-Host "AVISO: asset Windows do Siegfried nao encontrado no release $($rel.tag_name)" }
