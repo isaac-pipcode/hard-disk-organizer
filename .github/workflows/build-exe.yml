@@ -50,13 +50,17 @@ jobs:
           # GitHub. Além do 'sf.exe', o scanner precisa do arquivo de assinaturas
           # 'default.sig' AO LADO do binário (o scan aponta SIEGFRIED_HOME para a pasta
           # das ferramentas quando encontra o .sig ali). O .sig vem versionado em
-          # packaging/siegfried/ (limitado a 1 MiB). Preferimos o build 'win64_static'
-          # (sem dependência de DLL do MSVC), com fallback para 'win64'.
+          # packaging/siegfried/ (limitado a 1 MiB).
+          # ATENÇÃO: usamos o asset 'win64' e NÃO o 'win64_static'. No Siegfried,
+          # "static" significa assinatura EMBUTIDA no binário: o sf static ignora
+          # qualquer default.sig externo (cmd/sf/load_static.go). Versão FIXA, a
+          # mesma do roy que gerou o .sig (ver packaging/siegfried/README.md).
           try {
             $apiHead = @{ "User-Agent" = "preservascan-ci"; "Authorization" = "Bearer $env:GITHUB_TOKEN" }
-            $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/richardlehane/siegfried/releases/latest" -Headers $apiHead
-            $asset = $rel.assets | Where-Object { $_.name -match "win64_static\.zip$" } | Select-Object -First 1
-            if (-not $asset) { $asset = $rel.assets | Where-Object { $_.name -match "win64\.zip$" } | Select-Object -First 1 }
+            $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/richardlehane/siegfried/releases/tags/v1.11.9" -Headers $apiHead
+            $asset = $rel.assets | Where-Object { $_.name -match "_win64\.zip$" } | Select-Object -First 1
+            if (-not $asset) { $asset = $rel.assets | Where-Object { $_.name -match "win64_static\.zip$" } | Select-Object -First 1 }
+            Write-Host "Siegfried: release $($rel.tag_name), asset escolhido: $($asset.name)"
             if ($asset) {
               Invoke-WebRequest -Uri $asset.browser_download_url -OutFile sf.zip -UseBasicParsing
               Expand-Archive -Path sf.zip -DestinationPath sf_tmp -Force

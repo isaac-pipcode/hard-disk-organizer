@@ -33,6 +33,12 @@ Validação feita na geração (Siegfried 1.11.9):
 - Opções: `-bof 1048576 -eof 1048576`; o resto é padrão (PRONOM, com contêineres)
 - SHA-256: `cdea648de351ad68551ec00b45a6151429ae33caccee88850d4436708b229782`
 
+**Importante:** o `sf.exe` precisa ser o build **não-static** (asset
+`siegfried_<versão>_win64.zip`). No Siegfried, "static" significa assinatura
+**embutida** no binário: o `sf` static ignora qualquer `default.sig` externo e usa
+sempre a assinatura padrão, sem limite (veja `cmd/sf/load_static.go`). Até a
+v0.7.1, o build usava o `win64_static`, e por isso este arquivo era ignorado.
+
 Para conferir, `sf -sig default.sig -version` deve mostrar
 `max BOF 1048576; max EOF 1048576`.
 
