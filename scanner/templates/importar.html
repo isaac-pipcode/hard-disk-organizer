@@ -16,6 +16,8 @@
     {% if conflitos %}<div class="aviso a-err">⚠️ {{ conflitos|length }} disco(s) <b>já existem aqui com conteúdo
       diferente</b> e não foram alterados. Pode ser outra varredura do mesmo disco — ou dois discos diferentes
       com a mesma etiqueta. Confira antes de marcar “substituir”.</div>{% endif %}
+    {% if resultado.fichas or resultado.registros %}<div class="aviso a-ok">Também vieram {{ resultado.fichas or 0 }} ficha(s) de HD
+      (marca, modelo, estado) e {{ resultado.registros or 0 }} registro(s) de varredura — já aparecem no <a href="/">Acervo</a>.</div>{% endif %}
     {% for e in resultado.erros %}<div class="aviso a-err">⚠️ {{ e }}</div>{% endfor %}
     <div class="card pad0">
       <table>

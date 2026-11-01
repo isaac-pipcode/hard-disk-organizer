@@ -51,6 +51,18 @@ def _eh_manifesto(nome):
     return base.startswith("manifesto_") and base.lower().endswith((".jsonl", ".csv"))
 
 
+def _eh_extra(nome):
+    """Ficha do HD (disco_<etiqueta>.json) ou registro de operação
+    (operacao_<etiqueta>_<data>.log) — vêm no pacote de envio do PRESERVA-SCAN."""
+    base = os.path.basename(nome.replace("\\", "/"))
+    return ((base.startswith("disco_") and base.lower().endswith(".json")) or
+            (base.startswith("operacao_") and base.lower().endswith(".log")))
+
+
+def _importavel(nome):
+    return _eh_manifesto(nome) or _eh_extra(nome)
+
+
 def _fontes_de_pasta(pasta: Path):
     """[(nome, obter)] dos manifestos dentro de uma pasta (recursivo) e de zips nela.
     `obter()` lê os bytes só na hora de importar aquele disco: com dezenas de
@@ -61,7 +73,7 @@ def _fontes_de_pasta(pasta: Path):
             continue
         if p.suffix.lower() == ".zip":
             fontes.extend(_fontes_de_zip(p))
-        elif _eh_manifesto(p.name):
+        elif _importavel(p.name):
             fontes.append((p.name, p.read_bytes))
     return fontes
 
@@ -71,7 +83,7 @@ def _fontes_de_zip(caminho_zip: Path):
     try:
         with zipfile.ZipFile(caminho_zip) as z:
             membros = [i.filename for i in z.infolist()
-                       if not i.is_dir() and _eh_manifesto(i.filename)]
+                       if not i.is_dir() and _importavel(i.filename)]
     except zipfile.BadZipFile:
         raise ValueError(f"{caminho_zip.name}: arquivo .zip inválido ou corrompido")
     for m in membros:
@@ -178,6 +190,8 @@ def importar(fontes, manifest_dir, substituir=False):
     situação (importado|substituido|identico|conflito) e os números de integridade."""
     manifest_dir = Path(manifest_dir)
     manifest_dir.mkdir(parents=True, exist_ok=True)
+    extras = [(n, o) for n, o in fontes if _eh_extra(n)]
+    fontes = [(n, o) for n, o in fontes if _eh_manifesto(n)]
 
     # Agrupa por nome-base: se vierem .jsonl e .csv do mesmo disco, o .jsonl manda
     # (tem os metadados de mídia; o .csv é só uma projeção dele).
@@ -242,7 +256,57 @@ def importar(fontes, manifest_dir, substituir=False):
             info["situacao"] = "importado"
         _gravar(manifest_dir, label, linhas)
         discos.append(info)
-    return {"discos": discos, "erros": erros}
+    fichas, registros = _importar_extras(extras, manifest_dir, erros)
+    return {"discos": discos, "erros": erros, "fichas": fichas, "registros": registros}
+
+
+def _importar_extras(extras, manifest_dir, erros):
+    """Fichas dos HDs (marca, modelo, série, grupo, situação — inclusive HDs
+    "não reconhecidos", que não têm inventário) e registros de operação. A ficha
+    que chega é mesclada à local (o que vem prevalece; o histórico de quando o HD
+    foi visto é somado). Registro só é copiado se ainda não existir aqui."""
+    fichas = registros = 0
+    for nome, obter in extras:
+        base = os.path.basename(nome.replace("\\", "/"))
+        try:
+            dados = obter()
+        except Exception as e:
+            erros.append(f"{base}: não foi possível ler ({type(e).__name__}: {e})")
+            continue
+        if base.startswith("disco_"):
+            try:
+                nova = json.loads(dados.decode("utf-8"))
+                assert isinstance(nova, dict)
+            except Exception:
+                erros.append(f"{base}: ficha do HD inválida — ignorada")
+                continue
+            label = nova.get("etiqueta") or base[len("disco_"):-len(".json")]
+            if not _validar_etiqueta(label):
+                erros.append(f"{base}: etiqueta inválida na ficha: {label!r}")
+                continue
+            destino = manifest_dir / f"disco_{label}.json"
+            atual = {}
+            if destino.exists():
+                try:
+                    atual = json.loads(destino.read_text(encoding="utf-8"))
+                except Exception:
+                    atual = {}
+            vistos = sorted(set((atual.get("visto_em") or []) + (nova.get("visto_em") or [])))
+            atual.update(nova)
+            atual["etiqueta"] = label
+            if vistos:
+                atual["visto_em"] = vistos[-50:]
+            destino.write_text(json.dumps(atual, ensure_ascii=False, indent=2), encoding="utf-8")
+            fichas += 1
+        else:
+            if not _validar_etiqueta(base[:-4]):
+                erros.append(f"{base}: nome de registro inválido — ignorado")
+                continue
+            destino = manifest_dir / base
+            if not destino.exists():
+                destino.write_bytes(dados)
+                registros += 1
+    return fichas, registros
 
 
 def importar_de(origem, manifest_dir, substituir=False):

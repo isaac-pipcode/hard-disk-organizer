@@ -66,6 +66,12 @@
   .s-completar{ background:var(--warn-soft); color:var(--warn); }
   .s-a_varrer{ background:var(--surface2); color:var(--muted); }
   .s-concluido{ background:var(--ok-soft); color:var(--ok); }
+  .s-enviar{ background:var(--accent-soft); color:var(--accent-ink); }
+  .s-nao_reconhecido,.b-nr{ background:rgba(107,45,130,.12); color:#6b2d82; }
+  @media (prefers-color-scheme:dark){ .s-nao_reconhecido,.b-nr{ color:#d9a8ee; } }
+  .env{ font-size:.72rem; font-weight:700; padding:.02rem .45rem; border-radius:999px;
+        border:1px dashed var(--accent); color:var(--accent-ink); }
+  .c-extra{ text-align:center; font-size:.85rem; }
   .prog{ height:7px; border-radius:999px; background:var(--surface); overflow:hidden; margin-top:.35rem; }
   .prog span{ display:block; height:100%; background:var(--accent); }
   .espaco .trilho{ height:7px; border-radius:999px; background:var(--line); overflow:hidden; }
@@ -100,6 +106,8 @@
 {%- elif s == 'completar' %}<circle cx="12" cy="12" r="9"/><path d="M12 8v8"/><path d="M8 12h8"/>
 {%- elif s == 'a_varrer' %}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
 {%- elif s == 'novo' %}<path d="M12 5v14"/><path d="M5 12h14"/>
+{%- elif s == 'enviar' %}<path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>
+{%- elif s == 'nao_reconhecido' %}<path d="M9 7V3"/><path d="M15 7V3"/><path d="M6 7h12v4a6 6 0 0 1-12 0V7z"/><path d="M12 17v4"/><path d="M3 3l18 18"/>
 {%- else %}<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>{% endif %}
 </svg>
 {%- endmacro %}
@@ -112,10 +120,12 @@
     </div>
     <div class="acoes">
       <a class="btn" href="/varrer"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>Varrer um HD</a>
-      <a class="btn ghost" href="/passo/relatorio"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V10"/><path d="M12 20V4"/><path d="M19 20v-7"/></svg>Relatório</a>
+      <a class="btn ghost" href="/enviar"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>Enviar resultados{% if kpi and kpi.para_enviar %} ({{ kpi.para_enviar }}){% endif %}</a>
+      <a class="btn ghost" href="/registrar"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7V3"/><path d="M15 7V3"/><path d="M6 7h12v4a6 6 0 0 1-12 0V7z"/><path d="M12 17v4"/><path d="M3 3l18 18"/></svg>Registrar HD não reconhecido</a>
     </div>
   </div>
 
+  {% if ok %}<div class="aviso a-ok">{{ ok }}</div>{% endif %}
   {% if erro %}<div class="aviso a-err">Não foi possível montar o acervo: {{ erro }}</div>{% endif %}
 
   {% if not secoes %}
@@ -142,6 +152,7 @@
     </div>
     <div class="kpi2"><span class="bolha b-warn">{{ icone_sit('completar') }}</span><div><div class="n">{{ kpi.atencao }}</div><div class="r">pedem atenção</div></div></div>
     <div class="kpi2"><span class="bolha b-ok">{{ icone_sit('concluido') }}</span><div><div class="n">{{ kpi.concluidos }}</div><div class="r">concluídos e completos</div></div></div>
+    <a class="kpi2" href="/enviar" style="text-decoration:none;color:inherit"><span class="bolha b-acc">{{ icone_sit('enviar') }}</span><div><div class="n">{{ kpi.para_enviar }}</div><div class="r">inventários a enviar</div></div></a>
     <div class="kpi2"><span class="bolha b-err"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 10v4"/><path d="M6 10v4"/></svg></span><div><div class="n">{{ kpi.pouco_espaco }}</div><div class="r">com menos de 10% livre</div></div></div>
   </section>
 
@@ -164,7 +175,7 @@
 
   <div id="acervo">
   {% for s in secoes %}
-  {% set cor = {'varrendo':'b-acc','incompleta':'b-err','novo':'b-acc','completar':'b-warn','a_varrer':'','concluido':'b-ok'}[s.id] %}
+  {% set cor = {'varrendo':'b-acc','incompleta':'b-err','nao_reconhecido':'b-nr','novo':'b-acc','completar':'b-warn','enviar':'b-acc','a_varrer':'','concluido':'b-ok'}[s.id] %}
   <section class="secao" aria-labelledby="sec-{{ s.id }}" data-secao>
     <h2 id="sec-{{ s.id }}">{{ s.titulo }} <span class="cont {{ cor }}">{{ s.cartoes | length }}</span></h2>
     <div class="grade">
@@ -178,6 +189,7 @@
               {% if c.etiqueta %}<span class="etq">{{ c.etiqueta }}</span>{% else %}<span class="etq vazia">sem etiqueta</span>{% endif %}
               {% if c.grupo %}<span class="grupo"><i class="g-{{ c.grupo_id }}"></i>{{ c.grupo }}</span>{% endif %}
               {% if c.conectado_em %}<span class="letra" title="Ligado agora">{{ c.conectado_em }}</span>{% endif %}
+              {% if c.nao_enviado %}<span class="env" title="Este inventário ainda não entrou em nenhum pacote de envio">não enviado</span>{% endif %}
             </div>
             {% if c.marca or c.linha %}
             <div class="marca">{{ c.marca or 'Marca não informada' }}{% if c.linha %} · {{ c.linha }}{% endif %}</div>
@@ -214,6 +226,9 @@
         {% elif c.situacao == 'completar' %}<a class="c-acao prim" href="/varrer?etiqueta={{ et }}&amp;completar=1">Completar dados</a>
         {% elif c.situacao == 'a_varrer' %}<a class="c-acao sec" href="/varrer?etiqueta={{ et }}"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8V4z"/></svg>Varrer agora</a>
         {% elif c.situacao == 'novo' %}<a class="c-acao prim" href="/varrer">Dar nome e varrer</a>
+        {% elif c.situacao == 'enviar' %}<a class="c-acao prim" href="/enviar"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>Gerar pacote para envio</a>
+        {% elif c.situacao == 'nao_reconhecido' %}<a class="c-acao prim" href="/registrar?etiqueta={{ et }}">Ver o que fazer</a>
+        <a class="c-extra" href="/varrer?etiqueta={{ et }}">Voltou a aparecer? Varrer agora</a>
         {% else %}<a class="c-acao sec" href="/passo/relatorio">Ver no relatório</a>{% endif %}
       </article>
       {% endfor %}

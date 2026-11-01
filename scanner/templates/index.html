@@ -61,7 +61,8 @@
     <form action="/varrer" method="post">
       <div class="campo">
         <span id="t-raiz" style="display:block;font-weight:600;font-size:.92rem;margin-bottom:.15rem">Qual disco varrer? <span class="obrig">*</span></span>
-        <span class="ajuda">Ligue o HD antes de abrir esta tela. Não apareceu? <a href="/varrer" onclick="location.reload();return false;">atualizar lista</a>.</span>
+        <span class="ajuda">Ligue o HD antes de abrir esta tela. Não apareceu? <a href="/varrer" onclick="location.reload();return false;">atualizar lista</a> ·
+          continua sem aparecer? <a href="/registrar">registre como não reconhecido</a>.</span>
         {% set alvo = (discos | selectattr('reconhecido', 'equalto', etiqueta) | first) if etiqueta else none %}
         {% if etiqueta and not alvo %}{% set alvo = discos | selectattr('rotulo', 'equalto', etiqueta) | first %}{% endif %}
         {% set primeiro = alvo or (discos | rejectattr('sistema') | first) %}

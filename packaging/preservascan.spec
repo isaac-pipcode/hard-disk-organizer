@@ -29,6 +29,8 @@ hiddenimports += [
     "executar",                  # execucao guiada da limpeza (quarentena) (panel)
     "hardware",                  # marca/modelo/serie dos discos (icones + reconhecimento)
     "acervo",                    # tela inicial: cartoes com o estado de cada HD
+    "pacote",                    # pacote de envio (zip com inventarios + fichas + registros)
+    "versao", "_versao",         # versao do programa (o _versao.py e gerado no build)
     "importar",                  # importacao de manifestos de outras maquinas (panel)
     "dotenv",                    # carrega .env ao lado do .exe (DATABASE_URL do Supabase)
     "multipart",                 # python-multipart (formularios do painel)

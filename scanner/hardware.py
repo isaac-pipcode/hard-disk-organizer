@@ -334,10 +334,13 @@ def ler_ficha(pasta, etiqueta):
     return {}
 
 
-def atualizar_ficha(pasta, etiqueta, **campos):
-    """Mescla `campos` na ficha do HD (cria se não existir). Independe de haver
-    metadados físicos: guarda também o grupo e o estado da última varredura."""
+def atualizar_ficha(pasta, etiqueta, remover=(), **campos):
+    """Mescla `campos` na ficha do HD (cria se não existir) e apaga as chaves em
+    `remover`. Independe de haver metadados físicos: guarda também o grupo, o
+    estado da última varredura e a marcação de "não reconhecido"."""
     ficha = ler_ficha(pasta, etiqueta)
+    for k in remover:
+        ficha.pop(k, None)
     ficha.update({k: v for k, v in campos.items() if v not in (None, "")})
     ficha["etiqueta"] = etiqueta
     try:

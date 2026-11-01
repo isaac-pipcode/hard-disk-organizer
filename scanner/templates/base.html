@@ -116,6 +116,7 @@
       <div class="grupo">Etapa 1 · Varredura</div>
       <a href="/" class="{{ 'ativo' if ativo=='acervo' }}"><span class="ic">🗂️</span> Acervo</a>
       <a href="/varrer" class="{{ 'ativo' if ativo=='varredura' }}"><span class="ic">🔍</span> Varrer disco</a>
+      <a href="/enviar" class="{{ 'ativo' if ativo=='enviar' }}"><span class="ic">📤</span> Enviar resultados</a>
       <a href="/passo/importar" class="{{ 'ativo' if ativo=='importar' }}"><span class="ic">📥</span> Importar manifestos</a>
       <div class="grupo">Etapa 2 · Análise{% if not tem_manifestos %} <span class="muted" style="text-transform:none;font-weight:400">(após varrer ou importar)</span>{% endif %}</div>
       <a href="/passo/relatorio" class="{{ 'ativo' if ativo=='relatorio' }}{{ ' trava' if not tem_manifestos }}"><span class="ic">📊</span> Relatório do acervo</a>
@@ -126,7 +127,7 @@
       <div class="grupo">Configuração</div>
       <a href="/config" class="{{ 'ativo' if ativo=='config' }}"><span class="ic">🔌</span> Banco de dados</a>
     </nav>
-    <div class="rodape"><a href="/acompanhar">Acompanhar</a> · <a href="/log">log técnico</a></div>
+    <div class="rodape"><a href="/acompanhar">Acompanhar</a> · <a href="/log">log técnico</a>{% if versao %}<br><span title="versão do programa">versão {{ versao }}</span>{% endif %}</div>
   </aside>
   <main>
     {% block conteudo %}{% endblock %}

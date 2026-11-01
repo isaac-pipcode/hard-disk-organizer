@@ -36,3 +36,6 @@ logs
 .idea
 .DS_Store
 Thumbs.db
+
+# gerado no build com a tag da release
+scanner/_versao.py
