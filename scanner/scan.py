@@ -464,13 +464,28 @@ def _ja_do_manifesto(caminho_jsonl: Path):
     return ja
 
 
-def _registrar_ficha(disco_label, raiz):
+def _registrar_ficha(disco_label, raiz, grupo=None):
     """Grava a ficha física do HD (marca, modelo, nº de série, tipo) ao lado do
     manifesto: procedência do inventário e chave para reconhecer o HD depois.
     Nunca impede a varredura — sem metadados, segue sem ficha."""
     try:
         import hardware
         hardware.registrar(MANIFESTOS, disco_label, raiz)
+        if grupo:
+            hardware.atualizar_ficha(MANIFESTOS, disco_label, grupo=grupo)
+    except Exception:
+        pass
+
+
+def _estado_varredura(disco_label, status, **extra):
+    """Registra na ficha do HD o estado da última varredura. Uma varredura que
+    morre no meio (janela fechada, queda de energia) fica "em_andamento" — o
+    Acervo a mostra como INCOMPLETA, para o operador continuar de onde parou."""
+    try:
+        import hardware
+        estado = {"status": status, "em": datetime.datetime.now().isoformat(timespec="seconds")}
+        estado.update(extra)
+        hardware.atualizar_ficha(MANIFESTOS, disco_label, varredura=estado)
     except Exception:
         pass
 
@@ -485,7 +500,8 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
 
     db.registrar_disco(disco_label, grupo=grupo)
     db.abrir_run(run_id, disco_label)
-    _registrar_ficha(disco_label, raiz)
+    _registrar_ficha(disco_label, raiz, grupo)
+    _estado_varredura(disco_label, "em_andamento")
 
     # O que ja foi lido antes (para pular): banco (se online) + manifesto local
     # (offline). --force ignora tudo e revarre do zero.
@@ -651,10 +667,12 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
         db.enviar_lote(lote)
         db.fechar_run(run_id, novos, lidos)
         db.concluir_disco(disco_label)
+        _estado_varredura(disco_label, "concluida", lidos=lidos, novos=novos, erros=erros)
     except Exception as e:
         # Falha global (banco caiu, disco desconectado no meio, etc.): marca a run
         # como falha no banco e avisa o painel de forma estruturada.
         msg = f"{type(e).__name__}: {e}"
+        _estado_varredura(disco_label, "falhou", erro=msg, lidos=lidos, novos=novos)
         try:
             db.fechar_run(run_id, novos, lidos, status="falhou")
             db.concluir_disco(disco_label, status="falhou")

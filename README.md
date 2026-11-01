@@ -46,6 +46,25 @@ pasta **`manifestos/`** criada **ao lado do `.exe`**.
 GitHub Actions (não é versionado no repositório). Veja
 [`packaging/README.md`](packaging/README.md) para baixá-lo ou gerar uma nova versão.
 
+## Tela inicial: o Acervo
+
+Ao abrir o programa, a primeira tela é o **Acervo**: um cartão por HD, montado só
+com o que está neste computador (manifestos, fichas dos discos e registros das
+operações) — **funciona sem banco e sem internet**. Cada cartão mostra:
+
+- o **ícone do tipo físico** do HD (portátil 2,5″, de mesa 3,5″, SSD, interno,
+  pendrive), a **marca e a linha**, lidos do próprio disco na varredura;
+- a **etiqueta** do catálogo e o **grupo** (antigo, uso contínuo, transporte);
+- a **situação**, agrupada por prioridade: *em andamento*, *precisam de você*
+  (varredura incompleta ou interrompida), *ligados agora fora do catálogo*,
+  *completar dados* (faltam formato ou dados de mídia), *na fila* e *concluídos*;
+- o **espaço livre**, em vermelho abaixo de 10%;
+- o **botão da próxima ação** — "Continuar varredura" e "Completar dados" abrem o
+  formulário já com a etiqueta certa preenchida.
+
+Há busca por etiqueta, marca ou modelo, filtro por grupo e modo lista. HDs
+inventariados antes da v0.8.0 aparecem sem marca até serem ligados de novo.
+
 ## Conectar ao banco (Supabase) — opcional
 
 Por padrão o programa roda **offline** (dados só nos manifestos locais). Para

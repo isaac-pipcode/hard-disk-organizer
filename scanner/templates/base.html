@@ -114,7 +114,8 @@
     </div>
     <nav class="flow">
       <div class="grupo">Etapa 1 · Varredura</div>
-      <a href="/" class="{{ 'ativo' if ativo=='varredura' }}"><span class="ic">🔍</span> Varrer disco</a>
+      <a href="/" class="{{ 'ativo' if ativo=='acervo' }}"><span class="ic">🗂️</span> Acervo</a>
+      <a href="/varrer" class="{{ 'ativo' if ativo=='varredura' }}"><span class="ic">🔍</span> Varrer disco</a>
       <a href="/passo/importar" class="{{ 'ativo' if ativo=='importar' }}"><span class="ic">📥</span> Importar manifestos</a>
       <div class="grupo">Etapa 2 · Análise{% if not tem_manifestos %} <span class="muted" style="text-transform:none;font-weight:400">(após varrer ou importar)</span>{% endif %}</div>
       <a href="/passo/relatorio" class="{{ 'ativo' if ativo=='relatorio' }}{{ ' trava' if not tem_manifestos }}"><span class="ic">📊</span> Relatório do acervo</a>

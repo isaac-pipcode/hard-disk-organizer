@@ -50,12 +50,21 @@
     <a href="/acompanhar">Ver o que aconteceu →</a></div>
   {% endif %}
 
+  {% if completar and etiqueta %}
+  <div class="aviso a-rod">Para <b>completar os dados de {{ etiqueta }}</b>: ligue o HD, confira se ele está
+    selecionado abaixo e clique em <b>“Completar metadados (sem re-varrer)”</b>. O que já foi lido não é lido de novo.</div>
+  {% elif etiqueta %}
+  <div class="aviso a-rod">Continuando <b>{{ etiqueta }}</b>: ligue o HD, confira se ele está selecionado abaixo e
+    inicie — a varredura continua de onde parou.</div>
+  {% endif %}
   <div class="card">
     <form action="/varrer" method="post">
       <div class="campo">
         <span id="t-raiz" style="display:block;font-weight:600;font-size:.92rem;margin-bottom:.15rem">Qual disco varrer? <span class="obrig">*</span></span>
-        <span class="ajuda">Ligue o HD antes de abrir esta tela. Não apareceu? <a href="/" onclick="location.reload();return false;">atualizar lista</a>.</span>
-        {% set primeiro = discos | rejectattr('sistema') | first %}
+        <span class="ajuda">Ligue o HD antes de abrir esta tela. Não apareceu? <a href="/varrer" onclick="location.reload();return false;">atualizar lista</a>.</span>
+        {% set alvo = (discos | selectattr('reconhecido', 'equalto', etiqueta) | first) if etiqueta else none %}
+        {% if etiqueta and not alvo %}{% set alvo = discos | selectattr('rotulo', 'equalto', etiqueta) | first %}{% endif %}
+        {% set primeiro = alvo or (discos | rejectattr('sistema') | first) %}
         <div class="hd-lista" role="radiogroup" aria-labelledby="t-raiz">
           {% for d in discos %}
           {% set h = d.hw or {} %}
@@ -94,7 +103,7 @@
       <div class="campo">
         <label for="disco">Nome deste HD no catálogo <span class="obrig">*</span></label>
         <span class="ajuda">Apelido que identifica este disco no inventário (ex.: <i>TRANSPORTE A</i>). Se o HD já foi varrido, o programa o reconhece pelo nº de série e preenche o <b>mesmo nome</b> — assim a varredura continua de onde parou.</span>
-        <input id="disco" name="disco" required placeholder="ex.: TRANSPORTE A">
+        <input id="disco" name="disco" required placeholder="ex.: TRANSPORTE A" value="{{ etiqueta or '' }}"{% if etiqueta %} data-fixa="1"{% endif %}>
       </div>
 
       <div class="campo">
@@ -135,18 +144,8 @@
     </form>
   </div>
 
-  <h2>Discos já varridos</h2>
-  <div class="card pad0">
-    <table>
-      <tr><th>Disco</th><th>Grupo</th><th>Status</th><th>Arquivos</th><th>Tamanho</th></tr>
-      {% for d in resumo %}
-      <tr><td>{{ d[0] }}</td><td>{{ d[1] or '—' }}</td><td>{{ d[2] }}</td><td>{{ d[3] }}</td>
-          <td>{{ '%.1f'|format((d[4] or 0)/1e12) }} TB</td></tr>
-      {% else %}
-      <tr><td colspan="5" class="muted" style="padding:1rem">Nenhum disco varrido ainda{% if not online %} (offline — o resumo vem do banco){% endif %}.</td></tr>
-      {% endfor %}
-    </table>
-  </div>
+  <p class="muted" style="margin-top:1.4rem">O estado de todos os HDs — concluídos, incompletos e os que
+    precisam completar dados — fica no <a href="/">Acervo</a>.</p>
 {% endblock %}
 {% block scripts %}
   <script>
@@ -157,7 +156,7 @@
       var etq = document.getElementById('disco');
       var radios = document.querySelectorAll('input[name="raiz"]');
       if(!etq || !radios.length) return;
-      var auto = true;
+      var auto = !etq.getAttribute('data-fixa');
       etq.addEventListener('input', function(){ auto = false; });
       function aplicar(){
         var r = document.querySelector('input[name="raiz"]:checked');
