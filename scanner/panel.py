@@ -18,17 +18,20 @@ import shutil
 import threading
 import contextlib
 from pathlib import Path
+from urllib.parse import quote
 
 from typing import List
 
 from fastapi import FastAPI, Form, File, UploadFile
-from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse, RedirectResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 import db
 import hardware  # marca/modelo/série dos discos (ícone + reconhecimento)
 import acervo    # tela inicial: o estado de cada HD (cartões), sem banco
+import pacote    # pacote de envio (.zip) para o gestor do acervo
+from versao import VERSAO
 import scan       # a varredura roda no MESMO processo (essencial para o .exe empacotado)
 import relatorio  # gera o relatório local (dashboard + planilhas) a partir dos manifestos
 import dedup      # planeja a deduplicação (fase 2) a partir dos manifestos
@@ -64,7 +67,7 @@ def _tem_manifestos():
 
 def _ctx(**extra):
     """Contexto comum a todas as telas (sidebar): status do banco e se há manifestos."""
-    base = {"online": db.conectado(), "tem_manifestos": _tem_manifestos()}
+    base = {"online": db.conectado(), "tem_manifestos": _tem_manifestos(), "versao": VERSAO}
     base.update(extra)
     return base
 
@@ -295,7 +298,7 @@ def _job_para_acervo():
 
 
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request):
+def home(request: Request, ok: str = ""):
     """Tela inicial: o Acervo — cartões com o estado de cada HD, montados dos
     manifestos e fichas deste computador (funciona offline)."""
     try:
@@ -303,11 +306,124 @@ def home(request: Request):
     except Exception:
         conectados = []
     try:
-        dados = acervo.montar(MANIFEST_DIR, job=_job_para_acervo(), conectados=conectados)
+        envio = pacote.situacao_envio(MANIFEST_DIR, ENVIOS_DIR)
+        dados = acervo.montar(MANIFEST_DIR, job=_job_para_acervo(), conectados=conectados, envio=envio)
     except Exception as e:
         dados = {"secoes": [], "kpi": {}, "novos": 0, "erro": f"{type(e).__name__}: {e}"}
     return templates.TemplateResponse(request, "acervo.html", _ctx(
-        ativo="acervo", rodando=_rodando(), job_disco=JOB["disco"], **dados))
+        ativo="acervo", rodando=_rodando(), job_disco=JOB["disco"], ok=ok[:200], **dados))
+
+
+# ---------------------------------------------------------------- HD não reconhecido
+@app.get("/registrar", response_class=HTMLResponse)
+def tela_registrar(request: Request, etiqueta: str = ""):
+    """Registra no catálogo um HD que o computador não reconhece — para ele não
+    sumir do controle (antes ficava só na planilha) e o gestor saber o sintoma."""
+    etiqueta = etiqueta.strip()
+    ficha = hardware.ler_ficha(MANIFEST_DIR, etiqueta) if etiqueta else {}
+    return templates.TemplateResponse(request, "registrar.html", _ctx(
+        ativo="acervo", etiqueta=etiqueta, ficha=ficha, sintomas=acervo.SINTOMAS,
+        nr=ficha.get("nao_reconhecido") or {}, erro=None, conhecidas=_etiquetas_conhecidas()))
+
+
+def _etiquetas_conhecidas():
+    """Nomes já usados no catálogo (inventários + fichas): sugeridos ao digitar,
+    para não nascer um "HD_R" quando já existe "HD R"."""
+    try:
+        return sorted(set(pacote.etiquetas(MANIFEST_DIR)) | set(hardware.fichas(MANIFEST_DIR)), key=str.lower)
+    except Exception:
+        return []
+
+
+@app.post("/registrar", response_class=HTMLResponse)
+def registrar_hd(request: Request, etiqueta: str = Form(""), grupo: str = Form(""),
+                 capacidade: str = Form(""), sintoma: str = Form(""), obs: str = Form("")):
+    etiqueta = etiqueta.strip()
+    if not importar._validar_etiqueta(etiqueta):
+        return templates.TemplateResponse(request, "registrar.html", _ctx(
+            ativo="acervo", etiqueta=etiqueta, ficha={}, sintomas=acervo.SINTOMAS,
+            nr={"sintoma": sintoma, "obs": obs}, conhecidas=_etiquetas_conhecidas(),
+            erro='Informe o nome do HD (sem os caracteres < > : " / \\ | ? *).'), status_code=400)
+    hardware.atualizar_ficha(
+        MANIFEST_DIR, etiqueta, grupo=grupo.strip() or None,
+        capacidade_nominal=capacidade.strip() or None,
+        nao_reconhecido={"sintoma": sintoma if sintoma in acervo.SINTOMAS else "outro",
+                         "obs": obs.strip()[:2000],
+                         "em": time.strftime("%Y-%m-%dT%H:%M:%S")})
+    return RedirectResponse(url="/?ok=" + quote(f"{etiqueta} registrado como não reconhecido."),
+                            status_code=303)
+
+
+@app.post("/registrar/resolvido")
+def registrar_resolvido(etiqueta: str = Form("")):
+    """O HD voltou a ser reconhecido (ou foi registrado por engano): tira a marca.
+    Quando ele for varrido, a marca também sai sozinha."""
+    etiqueta = etiqueta.strip()
+    if importar._validar_etiqueta(etiqueta):
+        hardware.atualizar_ficha(MANIFEST_DIR, etiqueta, remover=("nao_reconhecido",))
+    return RedirectResponse(url="/?ok=" + quote(f"{etiqueta}: marca de não reconhecido retirada."),
+                            status_code=303)
+
+
+# ---------------------------------------------------------------- pacote de envio
+def _tela_enviar(request, resultado=None, erro=None, status_code=200):
+    sit = pacote.situacao_envio(MANIFEST_DIR, ENVIOS_DIR)
+    discos = []
+    for e, v in sit.items():
+        arq = MANIFEST_DIR / f"manifesto_{e}.jsonl"
+        try:
+            r = acervo.resumo_manifesto(arq)
+            arquivos, volume = acervo._milhar(r["arquivos"]), acervo.humano(r["bytes"])
+        except Exception:
+            arquivos, volume = "", ""
+        discos.append({"etiqueta": e, "pendente": v["pendente"], "em": v["em"] or "",
+                       "arquivos": arquivos, "volume": volume,
+                       "tamanho_manifesto": acervo.humano(arq.stat().st_size)})
+    avulsas = [a.name[len("disco_"):-len(".json")] for a in pacote.fichas_sem_inventario(MANIFEST_DIR)]
+    return templates.TemplateResponse(request, "enviar.html", _ctx(
+        ativo="enviar", discos=discos, avulsas=avulsas, pacotes=pacote.pacotes(ENVIOS_DIR)[:10],
+        pasta=str(ENVIOS_DIR), resultado=resultado, erro=erro,
+        humano=acervo.humano), status_code=status_code)
+
+
+@app.get("/enviar", response_class=HTMLResponse)
+def tela_enviar(request: Request):
+    return _tela_enviar(request)
+
+
+@app.post("/enviar", response_class=HTMLResponse)
+async def gerar_pacote(request: Request):
+    form = await request.form()
+    escolhidas = [v for k, v in form.multi_items() if k == "etiqueta"]
+    if not escolhidas:
+        return _tela_enviar(request, erro="Marque pelo menos um HD para o pacote.", status_code=400)
+    try:
+        import anyio
+        res = await anyio.to_thread.run_sync(pacote.gerar, MANIFEST_DIR, ENVIOS_DIR, escolhidas)
+    except Exception as e:
+        return _tela_enviar(request, erro=f"Não foi possível gerar o pacote: {e}", status_code=500)
+    return _tela_enviar(request, resultado=res)
+
+
+@app.get("/enviar/baixar/{nome}")
+def baixar_pacote(nome: str):
+    nome = os.path.basename(nome)
+    arq = ENVIOS_DIR / nome
+    if not (nome.startswith("PRESERVA-SCAN_") and nome.endswith(".zip") and arq.is_file()):
+        return PlainTextResponse("Pacote não encontrado.", status_code=404)
+    return FileResponse(arq, filename=nome, media_type="application/zip")
+
+
+@app.post("/enviar/abrir")
+def abrir_pasta_envios():
+    """Abre a pasta dos pacotes no Explorer (só no Windows, onde o .exe roda)."""
+    ENVIOS_DIR.mkdir(parents=True, exist_ok=True)
+    if platform.system() == "Windows":
+        try:
+            os.startfile(str(ENVIOS_DIR))  # noqa: S606 — abre o Explorer na pasta
+        except Exception:
+            pass
+    return RedirectResponse(url="/enviar", status_code=303)
 
 
 @app.get("/varrer", response_class=HTMLResponse)
@@ -505,6 +621,7 @@ def status():
 
 
 RELATORIO_DIR = MANIFEST_DIR / "relatorio"
+ENVIOS_DIR = MANIFEST_DIR.parent / "envios"   # pacotes .zip para o gestor do acervo
 
 
 @app.post("/relatorio")

@@ -99,6 +99,15 @@ jobs:
           if ($etDir) { Copy-Item "$($etDir.FullName)\*" packaging/ferramentas/ -Recurse -Force ; Write-Host "ExifTool dir: $($etDir.FullName)" }
           Get-ChildItem -Recurse packaging/ferramentas | Select-Object FullName, Length
 
+      - name: Gravar a versão no programa
+        shell: pwsh
+        env:
+          VERSAO: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          # O programa mostra a versão no menu e a grava em cada pacote de envio.
+          Set-Content -Path scanner/_versao.py -Encoding utf8 -Value "VERSAO = '$env:VERSAO'"
+          Get-Content scanner/_versao.py
+
       - name: Compilar o executável
         run: pyinstaller packaging/preservascan.spec --noconfirm
 

@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% from "_icones_hd.html" import icone_hd %}
+{% block titulo %}Registrar HD não reconhecido — PRESERVA-SCAN{% endblock %}
+{% block head_extra %}
+<style>
+  .passos{ display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:.7rem; margin:0 0 1.1rem; }
+  .passo{ display:flex; gap:.7rem; align-items:flex-start; padding:.85rem; border-radius:12px; background:var(--surface2);
+          border:1px solid var(--line); font-size:.9rem; }
+  .passo b{ display:block; margin-bottom:.1rem; }
+  .passo .ic2{ width:36px; height:36px; border-radius:10px; background:var(--surface); display:flex; align-items:center;
+               justify-content:center; flex:none; color:var(--muted); }
+  .nunca{ display:flex; gap:.7rem; align-items:flex-start; padding:.85rem 1rem; border-radius:12px; background:var(--err-soft);
+          color:var(--err); font-size:.92rem; margin:0 0 1.2rem; }
+  .sintomas{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:.6rem; }
+  .sintoma{ position:relative; display:flex; gap:.6rem; align-items:center; padding:.8rem .9rem; border:1px solid var(--line);
+            border-radius:12px; background:var(--surface); cursor:pointer; font-weight:600; font-size:.9rem; margin:0; min-height:44px; }
+  .sintoma:has(input:checked){ border:2px solid var(--accent); padding:calc(.8rem - 1px) calc(.9rem - 1px); background:var(--accent-soft); }
+  .sintoma input{ width:auto; margin:0; accent-color:var(--accent); }
+  .cab{ display:flex; gap:1rem; align-items:center; margin-bottom:1rem; }
+  .ico{ width:20px; height:20px; }
+</style>
+{% endblock %}
+{% block conteudo %}
+  <div class="cab">
+    <div style="width:72px;height:72px;border-radius:16px;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:none">{{ icone_hd('desconhecido', 56, 'HD não reconhecido') }}</div>
+    <div>
+      <h1>Registrar HD não reconhecido</h1>
+      <p class="lede" style="margin:0">Para o HD não sumir do controle: ele entra no Acervo como “não reconhecido”, com o sintoma anotado, e vai junto no pacote de envio.</p>
+    </div>
+  </div>
+
+  {% if erro %}<div class="aviso a-err">{{ erro }}</div>{% endif %}
+
+  <h2 style="margin-top:.4rem">Antes de registrar, tente</h2>
+  <div class="passos">
+    <div class="passo"><span class="ic2"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v8"/><path d="M8 6h8v4a4 4 0 0 1-8 0V6z"/><path d="M12 14v8"/></svg></span><span><b>1. Cabo e porta</b>Troque o cabo e use uma porta USB traseira. HD com fonte: a luz acende?</span></div>
+    <div class="passo"><span class="ic2"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/><path d="M7 9h10"/><path d="M7 13h6"/></svg></span><span><b>2. Gerenciamento de Disco</b>Botão direito no menu Iniciar. Veja se o HD aparece lá, mesmo sem letra.</span></div>
+    <div class="passo"><span class="ic2"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg></span><span><b>3. Barulho estranho?</b>Estalos, bipes ou não gira: desligue na hora e etiquete “NÃO LIGAR”.</span></div>
+  </div>
+  <div class="nunca" role="note">
+    <svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex:none;margin-top:.1rem"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>
+    <span><b>Nunca aceite</b> “Inicializar disco”, “Formatar” ou “Verificar e reparar” — o Windows oferece, e qualquer um deles pode apagar o acervo. Muitas vezes só a caixa USB queimou e o disco está bom: um técnico consegue ligá-lo por um adaptador.</span>
+  </div>
+
+  <div class="card">
+    <form method="post" action="/registrar">
+      <div class="campo">
+        <label for="etiqueta">Nome do HD no catálogo <span class="obrig">*</span></label>
+        <span class="ajuda">O nome da etiqueta colada no HD (ex.: <i>HD Simone</i>). Comece a digitar para ver os nomes já usados.</span>
+        <input id="etiqueta" name="etiqueta" required list="conhecidas" value="{{ etiqueta }}" autocomplete="off">
+        <datalist id="conhecidas">{% for e in conhecidas %}<option value="{{ e }}">{% endfor %}</datalist>
+      </div>
+      <div class="campo" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.9rem">
+        <div>
+          <label for="grupo">Grupo <span class="opc">(opcional)</span></label>
+          <select id="grupo" name="grupo">
+            {% set g = ficha.grupo or '' %}
+            <option value="" {{ 'selected' if not g }}>— não classificar —</option>
+            <option value="antigos" {{ 'selected' if g == 'antigos' }}>Antigo (acervo histórico)</option>
+            <option value="uso_continuo" {{ 'selected' if g == 'uso_continuo' }}>Uso contínuo</option>
+            <option value="transporte" {{ 'selected' if g == 'transporte' }}>Transporte</option>
+          </select>
+        </div>
+        <div>
+          <label for="capacidade">Capacidade <span class="opc">(como está na etiqueta)</span></label>
+          <input id="capacidade" name="capacidade" placeholder="ex.: 3 TB" value="{{ ficha.capacidade_nominal or '' }}">
+        </div>
+      </div>
+      <fieldset class="campo" style="border:0;padding:0;margin-left:0;margin-right:0">
+        <legend style="font-weight:600;font-size:.92rem;margin-bottom:.45rem;padding:0">O que acontece? <span class="obrig">*</span></legend>
+        <div class="sintomas">
+          {% for k, rot in sintomas.items() %}
+          <label class="sintoma"><input type="radio" name="sintoma" value="{{ k }}" required {{ 'checked' if (nr.sintoma or 'nao_aparece') == k }}>{{ rot }}</label>
+          {% endfor %}
+        </div>
+      </fieldset>
+      <div class="campo">
+        <label for="obs">Observações <span class="opc">(opcional)</span></label>
+        <span class="ajuda">O que já foi tentado, onde o HD está guardado, se é cópia única de algum material.</span>
+        <textarea id="obs" name="obs" rows="3">{{ nr.obs or '' }}</textarea>
+      </div>
+      <div class="btn-row">
+        <button class="btn" type="submit">Registrar no acervo</button>
+        <a class="btn ghost" href="/">Cancelar</a>
+      </div>
+    </form>
+    {% if nr and etiqueta %}
+    <form method="post" action="/registrar/resolvido" style="margin-top:1rem;border-top:1px solid var(--line);padding-top:1rem">
+      <input type="hidden" name="etiqueta" value="{{ etiqueta }}">
+      <span class="ajuda">Registrado em {{ (nr.em or '')[:10] }}. O HD voltou a funcionar, ou foi registrado por engano?</span>
+      <button class="btn sec" type="submit">Retirar a marca de “não reconhecido”</button>
+    </form>
+    {% endif %}
+  </div>
+{% endblock %}

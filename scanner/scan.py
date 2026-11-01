@@ -471,8 +471,9 @@ def _registrar_ficha(disco_label, raiz, grupo=None):
     try:
         import hardware
         hardware.registrar(MANIFESTOS, disco_label, raiz)
-        if grupo:
-            hardware.atualizar_ficha(MANIFESTOS, disco_label, grupo=grupo)
+        # O HD foi lido: se estava marcado como "não reconhecido", deixa de estar.
+        hardware.atualizar_ficha(MANIFESTOS, disco_label, remover=("nao_reconhecido",),
+                                 grupo=grupo)
     except Exception:
         pass
 

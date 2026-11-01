@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block titulo %}Enviar resultados — PRESERVA-SCAN{% endblock %}
+{% block head_extra %}
+<style>
+  .cab{ display:flex; gap:1rem; align-items:center; margin-bottom:1rem; }
+  .cab .bolha{ width:64px; height:64px; border-radius:16px; background:var(--accent-soft); color:var(--accent-ink);
+               display:flex; align-items:center; justify-content:center; flex:none; }
+  .ico{ width:20px; height:20px; flex:none; }
+  .lista-env{ display:flex; flex-direction:column; }
+  .linha-env{ display:flex; flex-wrap:wrap; align-items:center; gap:.5rem 1rem; padding:.7rem 1rem; border-bottom:1px solid var(--line);
+              cursor:pointer; font-weight:400; margin:0; min-height:44px; }
+  .linha-env:last-child{ border-bottom:0; }
+  .linha-env:hover{ background:var(--surface2); }
+  .linha-env input{ width:20px; height:20px; margin:0; accent-color:var(--accent); flex:none; }
+  .etq{ display:inline-flex; align-items:center; gap:.42rem; padding:.08rem .6rem .08rem .45rem; border:1.5px solid var(--ink);
+        border-radius:7px; font-weight:800; font-size:.92rem; background:var(--surface); }
+  .etq::before{ content:""; width:.45rem; height:.45rem; border-radius:50%; border:1.5px solid var(--ink); }
+  .num{ color:var(--muted); font-size:.85rem; flex:1 1 200px; }
+  .chip{ font-size:.76rem; font-weight:700; padding:.12rem .55rem; border-radius:999px; }
+  .chip.pend{ background:var(--accent-soft); color:var(--accent-ink); }
+  .chip.ok{ background:var(--ok-soft); color:var(--ok); }
+  .barra-sel{ display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; justify-content:space-between; padding:.7rem 1rem;
+              border-bottom:1px solid var(--line); background:var(--surface2); font-size:.88rem; }
+  .barra-sel button{ background:none; border:0; color:var(--accent); font:inherit; font-weight:650; cursor:pointer; padding:.3rem .2rem; min-height:36px; }
+  .sucesso{ display:flex; flex-wrap:wrap; gap:1rem; align-items:center; justify-content:space-between; }
+  code.sha{ font-size:.75rem; }
+</style>
+{% endblock %}
+{% block conteudo %}
+  <div class="cab">
+    <span class="bolha"><svg width="30" height="30" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
+    <div>
+      <h1>Enviar resultados</h1>
+      <p class="lede" style="margin:0">Junta os inventários num único arquivo <b>.zip</b> para mandar ao gestor do acervo (e-mail, Drive ou pendrive). Vai só a lista do que existe em cada HD — nenhum arquivo do acervo.</p>
+    </div>
+  </div>
+
+  {% if erro %}<div class="aviso a-err">{{ erro }}</div>{% endif %}
+
+  {% if resultado %}
+  <div class="card" style="border:2px solid var(--ok)">
+    <div class="sucesso">
+      <div>
+        <div style="font-size:1.1rem;font-weight:750;color:var(--ok)">Pacote pronto · {{ resultado.discos | length }} HD{{ 's' if resultado.discos | length != 1 }}{% if resultado.fichas_sem_inventario %} + {{ resultado.fichas_sem_inventario }} ficha{{ 's' if resultado.fichas_sem_inventario != 1 }} sem inventário{% endif %} · {{ humano(resultado.bytes) }}</div>
+        <div class="muted" style="font-size:.88rem;word-break:break-all">{{ resultado.nome }}</div>
+      </div>
+      <div class="btn-row" style="margin:0">
+        <a class="btn" href="/enviar/baixar/{{ resultado.nome | urlencode }}">Baixar o pacote</a>
+        <form method="post" action="/enviar/abrir" style="margin:0"><button class="btn ghost" type="submit">Abrir a pasta</button></form>
+      </div>
+    </div>
+    <p class="ajuda" style="margin:.9rem 0 0">Anexe o arquivo no e-mail ou suba no Drive combinado. Do outro lado, ele entra em <b>Importar manifestos</b>.
+      Código de conferência (SHA-256): <code class="sha">{{ resultado.sha256 }}</code></p>
+  </div>
+  {% endif %}
+
+  {% if not discos %}
+  <div class="card"><b>Ainda não há inventários neste computador.</b>
+    <p class="muted" style="margin:.3rem 0 0">Varra um HD primeiro — ele aparece aqui pronto para enviar.</p>
+    <div class="btn-row"><a class="btn" href="/varrer">Varrer um HD</a></div></div>
+  {% else %}
+  {% set pend = discos | selectattr('pendente') | list %}
+  <form method="post" action="/enviar" id="form-env">
+    <div class="card pad0">
+      <div class="barra-sel">
+        <span><b id="n-sel">{{ pend | length }}</b> de {{ discos | length }} selecionados · {{ pend | length }} ainda não enviado{{ 's' if pend | length != 1 }}</span>
+        <span>
+          <button type="button" data-sel="pendentes">Só os pendentes</button> ·
+          <button type="button" data-sel="todos">Todos</button> ·
+          <button type="button" data-sel="nenhum">Nenhum</button>
+        </span>
+      </div>
+      <div class="lista-env">
+        {% for d in discos %}
+        <label class="linha-env">
+          <input type="checkbox" name="etiqueta" value="{{ d.etiqueta }}" data-pendente="{{ '1' if d.pendente else '' }}" {{ 'checked' if d.pendente }}>
+          <span class="etq">{{ d.etiqueta }}</span>
+          <span class="num">{% if d.arquivos %}{{ d.arquivos }} arquivos · {{ d.volume }} no HD · {% endif %}inventário de {{ d.tamanho_manifesto }}</span>
+          {% if d.pendente and d.em %}<span class="chip pend">mudou desde {{ d.em[8:10] }}/{{ d.em[5:7] }}</span>
+          {% elif d.pendente %}<span class="chip pend">ainda não enviado</span>
+          {% else %}<span class="chip ok">enviado em {{ d.em[8:10] }}/{{ d.em[5:7] }}/{{ d.em[0:4] }}</span>{% endif %}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn" type="submit" id="btn-gerar"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg> Gerar pacote</button>
+      <span class="ajuda" style="margin:0">Vão junto as fichas dos HDs e os registros das varreduras, com a versão do programa.
+        {% if avulsas %}<br>Também vão sempre as fichas de {{ avulsas | length }} HD{{ 's' if avulsas | length != 1 }} sem inventário
+        (não reconhecidos ou na fila): <b>{{ avulsas | join(', ') }}</b>.{% endif %}</span>
+    </div>
+  </form>
+  {% endif %}
+
+  {% if pacotes %}
+  <h2>Pacotes já gerados</h2>
+  <div class="card pad0"><table>
+    <tr><th>Pacote</th><th>Gerado em</th><th>Tamanho</th><th></th></tr>
+    {% for p in pacotes %}
+    <tr><td style="word-break:break-all">{{ p.nome }}</td><td>{{ p.em.strftime('%d/%m/%Y %H:%M') }}</td><td>{{ humano(p.bytes) }}</td>
+        <td><a href="/enviar/baixar/{{ p.nome | urlencode }}">Baixar</a></td></tr>
+    {% endfor %}
+  </table></div>
+  <p class="ajuda">Pasta dos pacotes: <code>{{ pasta }}</code></p>
+  {% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  var caixas = document.querySelectorAll('input[name="etiqueta"]');
+  var n = document.getElementById('n-sel'), btn = document.getElementById('btn-gerar');
+  if(!caixas.length) return;
+  function contar(){
+    var k = 0; caixas.forEach(function(c){ if(c.checked) k++; });
+    n.textContent = k; btn.disabled = k === 0;
+    btn.lastChild.textContent = k ? ' Gerar pacote com ' + k + ' HD' + (k > 1 ? 's' : '') : ' Gerar pacote';
+  }
+  caixas.forEach(function(c){ c.addEventListener('change', contar); });
+  document.querySelectorAll('[data-sel]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var m = b.getAttribute('data-sel');
+      caixas.forEach(function(c){ c.checked = m === 'todos' || (m === 'pendentes' && !!c.getAttribute('data-pendente')); });
+      contar();
+    });
+  });
+  document.getElementById('form-env').addEventListener('submit', function(){
+    btn.disabled = true; btn.lastChild.textContent = ' Gerando o pacote…';
+  });
+  contar();
+})();
+</script>
+{% endblock %}
