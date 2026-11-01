@@ -1,20 +1,16 @@
 {% extends "base.html" %}
 {% block titulo %}Enviar resultados — PRESERVA-SCAN{% endblock %}
+{% from "_icones_sit.html" import icone_sit %}
 {% block head_extra %}
 <style>
-  .cab{ display:flex; gap:1rem; align-items:center; margin-bottom:1rem; }
   .cab .bolha{ width:64px; height:64px; border-radius:16px; background:var(--accent-soft); color:var(--accent-ink);
                display:flex; align-items:center; justify-content:center; flex:none; }
-  .ico{ width:20px; height:20px; flex:none; }
   .lista-env{ display:flex; flex-direction:column; }
   .linha-env{ display:flex; flex-wrap:wrap; align-items:center; gap:.5rem 1rem; padding:.7rem 1rem; border-bottom:1px solid var(--line);
               cursor:pointer; font-weight:400; margin:0; min-height:44px; }
   .linha-env:last-child{ border-bottom:0; }
   .linha-env:hover{ background:var(--surface2); }
   .linha-env input{ width:20px; height:20px; margin:0; accent-color:var(--accent); flex:none; }
-  .etq{ display:inline-flex; align-items:center; gap:.42rem; padding:.08rem .6rem .08rem .45rem; border:1.5px solid var(--ink);
-        border-radius:7px; font-weight:800; font-size:.92rem; background:var(--surface); }
-  .etq::before{ content:""; width:.45rem; height:.45rem; border-radius:50%; border:1.5px solid var(--ink); }
   .num{ color:var(--muted); font-size:.85rem; flex:1 1 200px; }
   .chip{ font-size:.76rem; font-weight:700; padding:.12rem .55rem; border-radius:999px; }
   .chip.pend{ background:var(--accent-soft); color:var(--accent-ink); }
@@ -28,7 +24,7 @@
 {% endblock %}
 {% block conteudo %}
   <div class="cab">
-    <span class="bolha"><svg width="30" height="30" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
+    <span class="bolha">{{ icone_sit('enviar', 30) }}</span>
     <div>
       <h1>Enviar resultados</h1>
       <p class="lede" style="margin:0">Junta os inventários num único arquivo <b>.zip</b> para mandar ao gestor do acervo (e-mail, Drive ou pendrive). Vai só a lista do que existe em cada HD — nenhum arquivo do acervo.</p>
@@ -76,15 +72,15 @@
           <input type="checkbox" name="etiqueta" value="{{ d.etiqueta }}" data-pendente="{{ '1' if d.pendente else '' }}" {{ 'checked' if d.pendente }}>
           <span class="etq">{{ d.etiqueta }}</span>
           <span class="num">{% if d.arquivos %}{{ d.arquivos }} arquivos · {{ d.volume }} no HD · {% endif %}inventário de {{ d.tamanho_manifesto }}</span>
-          {% if d.pendente and d.em %}<span class="chip pend">mudou desde {{ d.em[8:10] }}/{{ d.em[5:7] }}</span>
+          {% if d.pendente and d.em %}<span class="chip pend">mudou desde o envio de {{ d.em | data_curta }}</span>
           {% elif d.pendente %}<span class="chip pend">ainda não enviado</span>
-          {% else %}<span class="chip ok">enviado em {{ d.em[8:10] }}/{{ d.em[5:7] }}/{{ d.em[0:4] }}</span>{% endif %}
+          {% else %}<span class="chip ok">enviado em {{ d.em | data_curta }}</span>{% endif %}
         </label>
         {% endfor %}
       </div>
     </div>
     <div class="btn-row">
-      <button class="btn" type="submit" id="btn-gerar"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg> Gerar pacote</button>
+      <button class="btn" type="submit" id="btn-gerar">{{ icone_sit('enviar') }} Gerar pacote</button>
       <span class="ajuda" style="margin:0">Vão junto as fichas dos HDs e os registros das varreduras, com a versão do programa.
         {% if avulsas %}<br>Também vão sempre as fichas de {{ avulsas | length }} HD{{ 's' if avulsas | length != 1 }} sem inventário
         (não reconhecidos ou na fila): <b>{{ avulsas | join(', ') }}</b>.{% endif %}</span>

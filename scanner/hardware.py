@@ -27,6 +27,8 @@ import subprocess
 import time
 from pathlib import Path
 
+import nomes
+
 _CACHE = {"em": 0.0, "dados": {}}
 _CACHE_SEG = 20
 
@@ -320,8 +322,8 @@ CAMPOS_FICHA = ("modelo", "fabricante", "serial", "conexao", "midia", "tamanho",
                 "serial_volume", "sistema_arquivos", "firmware", "pnp", "livre", "total")
 
 
-def _arquivo_ficha(pasta, etiqueta):
-    return Path(pasta) / f"disco_{etiqueta}.json"
+_arquivo_ficha = nomes.ficha
+MAX_VISTOS = 50   # quantas datas de "HD visto neste computador" a ficha guarda
 
 
 def ler_ficha(pasta, etiqueta):
@@ -343,6 +345,10 @@ def atualizar_ficha(pasta, etiqueta, remover=(), **campos):
         ficha.pop(k, None)
     ficha.update({k: v for k, v in campos.items() if v not in (None, "")})
     ficha["etiqueta"] = etiqueta
+    return _gravar_ficha(pasta, etiqueta, ficha)
+
+
+def _gravar_ficha(pasta, etiqueta, ficha):
     try:
         Path(pasta).mkdir(parents=True, exist_ok=True)
         _arquivo_ficha(pasta, etiqueta).write_text(
@@ -361,8 +367,32 @@ def registrar(pasta, etiqueta, caminho):
     vistos = (ler_ficha(pasta, etiqueta).get("visto_em") or [])
     vistos.append(time.strftime("%Y-%m-%dT%H:%M:%S"))
     campos = {k: info.get(k) for k in CAMPOS_FICHA}
-    campos["visto_em"] = vistos[-50:]
+    campos["visto_em"] = vistos[-MAX_VISTOS:]
     return atualizar_ficha(pasta, etiqueta, **campos)
+
+
+def mesclar_ficha(pasta, etiqueta, nova):
+    """Junta à ficha local uma ficha vinda de outro computador (pacote de envio):
+    o que chega prevalece, e as datas em que o HD foi visto são somadas."""
+    ficha = ler_ficha(pasta, etiqueta)
+    vistos = sorted(set((ficha.get("visto_em") or []) + (nova.get("visto_em") or [])))
+    ficha.update(nova)
+    ficha["etiqueta"] = etiqueta
+    if vistos:
+        ficha["visto_em"] = vistos[-MAX_VISTOS:]
+    return _gravar_ficha(pasta, etiqueta, ficha)
+
+
+def nao_reconhecido(ficha):
+    """A marca de "não reconhecido" vale enquanto o HD não for lido depois dela
+    (varredura, ou o HD visto ligado ao completar dados): quem voltou a funcionar
+    deixa de estar marcado sozinho — aqui ou no computador do gestor, porque as
+    datas vêm na ficha."""
+    nr = ficha.get("nao_reconhecido")
+    if not isinstance(nr, dict):
+        return None
+    lido = max([(ficha.get("varredura") or {}).get("em") or ""] + (ficha.get("visto_em") or [])[-1:])
+    return nr if (nr.get("em") or "") >= lido else None
 
 
 def fichas(pasta):

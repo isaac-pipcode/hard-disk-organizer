@@ -101,6 +101,12 @@
       .flow .grupo{ width:100%; margin:.5rem .6rem .1rem; }
       main{ padding:1.2rem; }
     }
+    /* peças comuns às telas do Acervo */
+    .ico{ width:18px; height:18px; flex:none; }
+    .cab{ display:flex; gap:1rem; align-items:center; margin-bottom:1rem; }
+    .etq{ display:inline-flex; align-items:center; gap:.42rem; padding:.08rem .6rem .08rem .45rem; border:1.5px solid var(--ink);
+          border-radius:7px; font-weight:800; font-size:.95rem; letter-spacing:.02em; background:var(--surface); }
+    .etq::before{ content:""; width:.45rem; height:.45rem; border-radius:50%; border:1.5px solid var(--ink); }
   </style>
   {% block head_extra %}{% endblock %}
 </head>

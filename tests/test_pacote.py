@@ -83,7 +83,7 @@ def verificar():
         situ = {c["etiqueta"]: c["situacao"] for s in d["secoes"] for c in s["cartoes"]}
         ck("Acervo: pendente concluído = pronto para enviar; enviado = concluído; NR",
            (situ["HD B"], situ["HD A"], situ["HD U"]), ("enviar", "concluido", "nao_reconhecido"))
-        ck("KPI para enviar / não reconhecidos", (d["kpi"]["para_enviar"], d["kpi"]["nao_reconhecidos"]), (1, 1))
+        ck("KPI para enviar", d["kpi"]["para_enviar"], 1)
         a = next(c for s in d["secoes"] for c in s["cartoes"] if c["etiqueta"] == "HD A")
         ck("HD já enviado diz em qual pacote", a["detalhe"].startswith("Incluído no pacote de"), True)
 
@@ -99,6 +99,16 @@ def verificar():
         ck("importa fichas e registros", (r["fichas"], r["registros"]), (2, 1))
         ficha_u = hardware.ler_ficha(destino, "HD U")
         ck("ficha do não reconhecido chega intacta", (ficha_u.get("nao_reconhecido") or {}).get("sintoma"), "nao_aparece")
+        # O HD U volta a funcionar e é varrido na escola; o pacote novo leva a ficha
+        # sem a marca — no computador do gestor ele deixa de ser "não reconhecido".
+        hardware.atualizar_ficha(man, "HD U", remover=("nao_reconhecido",),
+                                 varredura={"status": "concluida", "em": "2026-11-01T10:00:00"})
+        _manifesto(man, "HD U")
+        res3 = pacote.gerar(man, env, selecionadas=["HD U"])
+        importar.importar_de(res3["arquivo"], destino)
+        d2 = acervo.montar(destino)
+        u = next(c for s in d2["secoes"] for c in s["cartoes"] if c["etiqueta"] == "HD U")
+        ck("gestor: HD varrido depois da marca deixa de ser não reconhecido", u["situacao"], "concluido")
         r2 = importar.importar_de(zpath, destino)
         ck("reimportar o mesmo pacote: idêntico, sem duplicar registro",
            ([x["situacao"] for x in r2["discos"]], r2["registros"]), (["identico", "identico"], 0))

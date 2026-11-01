@@ -63,6 +63,14 @@ def verificar():
         (p / "operacao_HD E_20261002_100000.log").write_text("=== backfill HD E (F:\\) ===\nsem fim\n", encoding="utf-8")
         # HD F: tem ficha, mas nenhum inventário ainda
         hardware.atualizar_ficha(p, "HD F", grupo="transporte")
+        # HD G: marcado "não reconhecido" e varrido DEPOIS -> a marca não vale mais
+        _manifesto(p, "HD G", [_reg("g.mov", "mov")])
+        hardware.atualizar_ficha(p, "HD G", nao_reconhecido={"sintoma": "barulho", "em": "2026-10-01T09:00:00"},
+                                 varredura={"status": "concluida", "em": "2026-10-02T09:00:00"})
+        # HD H: varrido antes, marcado "não reconhecido" depois -> vale
+        _manifesto(p, "HD H", [_reg("h.mov", "mov")])
+        hardware.atualizar_ficha(p, "HD H", nao_reconhecido={"sintoma": "barulho", "em": "2026-10-05T09:00:00"},
+                                 varredura={"status": "concluida", "em": "2026-10-02T09:00:00"})
 
         conectados = [
             {"valor": "E:\\", "letra": "E:", "rotulo": "MIDIAS", "reconhecido": "HD A",
@@ -89,15 +97,18 @@ def verificar():
         ck("inventário antigo com registro OK = concluído (ignora o backfill)", e["situacao"], "concluido")
         ck("ficha sem inventário = na fila para varrer", f["situacao"], "a_varrer")
         ck("HD sem ficha física pede para ligar (marca vazia)", (d["marca"], d["tem_ficha_fisica"]), ("", False))
+        ck("marca de não reconhecido: vale só se for depois da última leitura",
+           (_card(dados, "HD G")["situacao"], _card(dados, "HD H")["situacao"]), ("concluido", "nao_reconhecido"))
+        ck("detalhe do não reconhecido = sintoma", _card(dados, "HD H")["detalhe"], acervo.SINTOMAS["barulho"])
 
         novos = [x for s in dados["secoes"] if s["id"] == "novo" for x in s["cartoes"]]
         ck("HD novo ligado vira cartão próprio (disco do sistema fica de fora)", len(novos), 1)
         ck("cartão do HD novo traz marca e tipo lidos do disco", (novos[0]["marca"], novos[0]["tipo"]), ("Toshiba", "portatil"))
 
         ordem = [s["id"] for s in dados["secoes"]]
-        ck("seções na ordem de prioridade", ordem, ["incompleta", "novo", "completar", "a_varrer", "concluido"])
+        ck("seções na ordem de prioridade", ordem, ["incompleta", "nao_reconhecido", "novo", "completar", "a_varrer", "concluido"])
         k = dados["kpi"]
-        ck("indicadores", (k["hds"], k["varridos"], k["atencao"], k["concluidos"], k["pouco_espaco"]), (6, 5, 3, 2, 1))
+        ck("indicadores", (k["hds"], k["varridos"], k["atencao"], k["concluidos"], k["pouco_espaco"]), (8, 7, 4, 3, 1))
 
         # com uma varredura em andamento no HD C
         dados2 = acervo.montar(p, job={"disco": "HD C", "pct": 41, "fase": "Lendo e conferindo arquivos"}, conectados=[])
