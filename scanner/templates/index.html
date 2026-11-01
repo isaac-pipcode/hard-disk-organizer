@@ -1,4 +1,37 @@
 {% extends "base.html" %}
+{% from "_icones_hd.html" import icone_hd %}
+{% block head_extra %}
+<style>
+  .hd-lista{ display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:.7rem; }
+  .hd-card{ position:relative; display:flex; gap:.85rem; align-items:flex-start; padding:.9rem 1rem;
+            border:1px solid var(--line); border-radius:14px; background:var(--surface); cursor:pointer;
+            font-weight:400; margin:0; transition:border-color .15s, box-shadow .15s; }
+  .hd-card:hover{ border-color:var(--accent); }
+  .hd-card:has(input:checked){ border:2px solid var(--accent); padding:calc(.9rem - 1px) calc(1rem - 1px);
+            box-shadow:0 0 0 4px var(--accent-soft); }
+  .hd-card input{ position:absolute; opacity:0; pointer-events:none; }
+  .hd-card input:focus-visible + .hd-ic{ outline:2px solid var(--accent); outline-offset:4px; border-radius:10px; }
+  .hd-card.sistema{ opacity:.72; }
+  .hd-txt{ display:flex; flex-direction:column; gap:.2rem; min-width:0; flex:1; }
+  .hd-topo{ display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; }
+  .etq{ display:inline-flex; align-items:center; gap:.4rem; padding:.05rem .55rem .05rem .4rem; border:1.5px solid var(--ink);
+        border-radius:6px; font-weight:800; font-size:.86rem; letter-spacing:.02em; background:var(--surface); }
+  .etq::before{ content:""; width:.42rem; height:.42rem; border-radius:50%; border:1.5px solid var(--ink); }
+  .hd-letra{ font-size:.78rem; font-weight:700; color:var(--muted); background:var(--surface2);
+             border:1px solid var(--line); border-radius:6px; padding:0 .4rem; }
+  .hd-marca{ font-weight:650; font-size:.92rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .hd-meta{ color:var(--muted); font-size:.8rem; }
+  .hd-barra{ height:6px; border-radius:999px; background:var(--line); overflow:hidden; margin-top:.25rem; }
+  .hd-barra span{ display:block; height:100%; background:var(--accent); }
+  .hd-barra.cheio span{ background:var(--err); }
+  .hd-livre{ font-size:.78rem; color:var(--muted); }
+  .hd-livre.cheio{ color:var(--err); font-weight:650; }
+  .pill{ display:inline-block; font-size:.74rem; font-weight:700; padding:.05rem .5rem; border-radius:999px; }
+  .pill.rec{ background:var(--ok-soft); color:var(--ok); }
+  .pill.sis{ background:var(--warn-soft); color:var(--warn); }
+  .pill.novo{ background:var(--accent-soft); color:var(--accent-ink); }
+</style>
+{% endblock %}
 {% block titulo %}Varredura — PRESERVA-SCAN{% endblock %}
 {% block conteudo %}
   <div class="titulo-linha"><h1>Varredura</h1></div>
@@ -20,21 +53,47 @@
   <div class="card">
     <form action="/varrer" method="post">
       <div class="campo">
-        <label for="raiz">Qual disco varrer? <span class="obrig">*</span></label>
+        <span id="t-raiz" style="display:block;font-weight:600;font-size:.92rem;margin-bottom:.15rem">Qual disco varrer? <span class="obrig">*</span></span>
         <span class="ajuda">Ligue o HD antes de abrir esta tela. Não apareceu? <a href="/" onclick="location.reload();return false;">atualizar lista</a>.</span>
-        <select id="raiz" name="raiz" required>
+        {% set primeiro = discos | rejectattr('sistema') | first %}
+        <div class="hd-lista" role="radiogroup" aria-labelledby="t-raiz">
           {% for d in discos %}
-          <option value="{{ d.valor }}" data-rotulo="{{ d.rotulo }}">{{ d.texto }}</option>
+          {% set h = d.hw or {} %}
+          {% set usado = (100 - (d.livre_pct or 0)) if d.livre_pct is not none else none %}
+          <label class="hd-card{{ ' sistema' if d.sistema }}">
+            <input type="radio" name="raiz" value="{{ d.valor }}" data-rotulo="{{ d.reconhecido or d.rotulo }}"
+                   {{ 'checked' if primeiro and d.valor == primeiro.valor }} required>
+            <span class="hd-ic">{{ icone_hd(h.tipo or 'desconhecido', 52, h.rotulo_tipo or 'Disco') }}</span>
+            <span class="hd-txt">
+              <span class="hd-topo">
+                {% if d.reconhecido %}<span class="etq">{{ d.reconhecido }}</span>{% endif %}
+                {% if d.letra %}<span class="hd-letra">{{ d.letra }}</span>{% endif %}
+                {% if d.rotulo and d.rotulo != d.reconhecido %}<span class="hd-meta">“{{ d.rotulo }}”</span>{% endif %}
+              </span>
+              <span class="hd-marca">{{ h.marca or 'Marca não informada' }}{% if h.linha %} · {{ h.linha }}{% endif %}</span>
+              <span class="hd-meta">{{ h.rotulo_tipo or 'Disco' }}{% if h.formato %} {{ h.formato }}{% endif %}{% if h.conexao %} · {{ h.conexao }}{% endif %}{% if d.tamanho %} · {{ d.tamanho }}{% endif %}</span>
+              {% if h.modelo %}<span class="hd-meta" title="Modelo informado pelo próprio disco">{{ h.modelo }}{% if h.serial %} · série {{ h.serial[-6:] }}{% endif %}</span>{% endif %}
+              {% if usado is not none %}
+              <span class="hd-barra{{ ' cheio' if d.livre_pct < 10 }}"><span style="width:{{ usado }}%"></span></span>
+              <span class="hd-livre{{ ' cheio' if d.livre_pct < 10 }}">{{ d.livre }} livres{% if d.livre_pct < 10 %} — abaixo de 10%{% endif %}</span>
+              {% endif %}
+              <span>
+                {% if d.sistema %}<span class="pill sis">Disco do sistema — evite varrer</span>
+                {% elif d.reconhecido %}<span class="pill rec">Reconhecido pelo nº de série — continua de onde parou</span>
+                {% else %}<span class="pill novo">Novo no catálogo</span>{% endif %}
+              </span>
+            </span>
+          </label>
           {% else %}
-          <option value="" disabled selected>Nenhum disco detectado — ligue um HD e atualize</option>
+          <div class="aviso a-rod" style="margin:0">Nenhum disco detectado — ligue um HD e clique em “atualizar lista”.</div>
           {% endfor %}
-        </select>
+        </div>
         {% if not discos %}<div class="ajuda" style="color:var(--warn)">Conecte o HD por USB e clique em “atualizar lista”.</div>{% endif %}
       </div>
 
       <div class="campo">
         <label for="disco">Nome deste HD no catálogo <span class="obrig">*</span></label>
-        <span class="ajuda">Apelido que identifica este disco no inventário. Já sugerimos o nome do volume — pode manter ou ajustar (ex.: <i>TRANSPORTE A</i>).</span>
+        <span class="ajuda">Apelido que identifica este disco no inventário (ex.: <i>TRANSPORTE A</i>). Se o HD já foi varrido, o programa o reconhece pelo nº de série e preenche o <b>mesmo nome</b> — assim a varredura continua de onde parou.</span>
         <input id="disco" name="disco" required placeholder="ex.: TRANSPORTE A">
       </div>
 
@@ -92,16 +151,21 @@
 {% block scripts %}
   <script>
     (function(){
-      var sel = document.getElementById('raiz'), etq = document.getElementById('disco');
-      if(!sel || !etq) return;
+      // A etiqueta acompanha o disco escolhido: se o HD foi RECONHECIDO pelo nº de
+      // série, vem o nome do catálogo (retomada segura); senão, o rótulo do volume.
+      // Se o operador digitar algo, respeitamos e paramos de sobrescrever.
+      var etq = document.getElementById('disco');
+      var radios = document.querySelectorAll('input[name="raiz"]');
+      if(!etq || !radios.length) return;
       var auto = true;
       etq.addEventListener('input', function(){ auto = false; });
       function aplicar(){
-        var opt = sel.options[sel.selectedIndex];
-        var rot = opt ? (opt.getAttribute('data-rotulo') || '') : '';
+        var r = document.querySelector('input[name="raiz"]:checked');
+        var rot = r ? (r.getAttribute('data-rotulo') || '') : '';
         if(rot && (auto || etq.value.trim() === '')){ etq.value = rot; auto = true; }
       }
-      sel.addEventListener('change', aplicar); aplicar();
+      radios.forEach(function(r){ r.addEventListener('change', aplicar); });
+      aplicar();
     })();
   </script>
 {% endblock %}
