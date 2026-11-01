@@ -1,0 +1,57 @@
+{#- Ilustrações dos tipos de disco (desenho próprio, sem logotipos de fabricantes).
+    O tipo vem de hardware.classificar(): marca + modelo + conexão + HDD/SSD lidos
+    do próprio disco. Uso: {% from "_icones_hd.html" import icone_hd %}
+    {{ icone_hd(tipo, 56) }} -#}
+{% macro icone_hd(tipo, tamanho=56, rotulo="") -%}
+<svg viewBox="0 0 64 64" width="{{ tamanho }}" height="{{ tamanho }}" role="img" aria-label="{{ rotulo or tipo }}" style="flex:none;display:block">
+{%- if tipo == "portatil" %}
+<ellipse cx="32" cy="55" rx="24" ry="2.5" fill="#000" opacity=".10"/>
+<rect x="7" y="21" width="50" height="31" rx="7" fill="#1d232b"/>
+<rect x="7" y="17" width="50" height="31" rx="7" fill="#2f3742"/>
+<rect x="11" y="21" width="42" height="23" rx="4.5" fill="none" stroke="#4a5462" stroke-width="1.5"/>
+<path d="M15 27h13" stroke="#5b6675" stroke-width="2" stroke-linecap="round"/>
+<circle cx="48" cy="39" r="1.9" fill="#6ee7a0"/>
+<rect x="28" y="46.5" width="8" height="3" rx="1.2" fill="#12161b"/>
+{%- elif tipo == "mesa" %}
+<ellipse cx="31" cy="58" rx="17" ry="2.4" fill="#000" opacity=".12"/>
+<rect x="19" y="8" width="26" height="48" rx="4" fill="#1d232b"/>
+<rect x="16" y="6" width="26" height="48" rx="4" fill="#2f3742"/>
+<path d="M21 13h16M21 17h16M21 21h16M21 25h16" stroke="#4a5462" stroke-width="1.6" stroke-linecap="round"/>
+<circle cx="29" cy="46" r="1.9" fill="#6ee7a0"/>
+<path d="M42 44c6 0 8 2 8 6v4" stroke="#7a8392" stroke-width="2" fill="none" stroke-linecap="round"/>
+<rect x="47" y="53" width="6" height="6" rx="1.2" fill="#7a8392"/>
+{%- elif tipo == "ssd_externo" %}
+<ellipse cx="31" cy="56" rx="17" ry="2.4" fill="#000" opacity=".10"/>
+<rect x="17" y="14" width="32" height="40" rx="8" fill="#2b323c"/>
+<rect x="15" y="11" width="32" height="40" rx="8" fill="#4a5462"/>
+<rect x="20" y="16" width="22" height="30" rx="5" fill="none" stroke="#66717f" stroke-width="1.5"/>
+<path d="M33 21l-6 9h5l-2 8 6-10h-5l2-7z" fill="#9aa6b8"/>
+<rect x="27" y="49" width="8" height="3" rx="1.5" fill="#1d232b"/>
+{%- elif tipo == "interno_hdd" %}
+<rect x="8" y="9" width="48" height="44" rx="4" fill="#cdd2d9" stroke="#8f98a4" stroke-width="1.5"/>
+<circle cx="29" cy="30" r="14" fill="#e8ebef" stroke="#8f98a4" stroke-width="1.5"/>
+<circle cx="29" cy="30" r="3.2" fill="#8f98a4"/>
+<path d="M47 45L35 33" stroke="#4a5462" stroke-width="3" stroke-linecap="round"/>
+<circle cx="47" cy="45" r="3.2" fill="#4a5462"/>
+<circle cx="12.5" cy="13.5" r="1.5" fill="#8f98a4"/><circle cx="51.5" cy="13.5" r="1.5" fill="#8f98a4"/>
+<circle cx="12.5" cy="48.5" r="1.5" fill="#8f98a4"/><circle cx="51.5" cy="48.5" r="1.5" fill="#8f98a4"/>
+<rect x="14" y="53" width="24" height="3.5" rx="1" fill="#4a5462"/>
+{%- elif tipo == "interno_ssd" %}
+<rect x="5" y="23" width="54" height="18" rx="2.5" fill="#2f3742"/>
+<rect x="15" y="27" width="14" height="10" rx="1.5" fill="#12161b"/>
+<rect x="32" y="27" width="14" height="10" rx="1.5" fill="#12161b"/>
+<path d="M8 26v12" stroke="#d4a72c" stroke-width="2.4" stroke-dasharray="1.4 1.4"/>
+<circle cx="54" cy="32" r="2.6" fill="#f4f2ec" stroke="#5b6270" stroke-width="1.2"/>
+{%- elif tipo == "pendrive" %}
+<rect x="9" y="24" width="34" height="16" rx="4.5" fill="#3b4350"/>
+<rect x="43" y="27" width="13" height="10" rx="1" fill="#cdd2d9" stroke="#8f98a4" stroke-width="1"/>
+<rect x="47" y="30" width="2.6" height="2.6" fill="#5b6270"/><rect x="51.5" y="30" width="2.6" height="2.6" fill="#5b6270"/>
+<circle cx="14.5" cy="32" r="2.3" fill="#f4f2ec"/>
+{%- else %}
+<rect x="12" y="13" width="40" height="38" rx="7" fill="#d6d1c4"/>
+<rect x="12" y="13" width="40" height="38" rx="7" fill="none" stroke="#b3ab99" stroke-width="1.5" stroke-dasharray="3 3"/>
+<path d="M27 27a5 5 0 1 1 7 4.6c-1.3.6-2 1.6-2 3V36" stroke="#5b6270" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+<circle cx="32" cy="41" r="1.7" fill="#5b6270"/>
+{%- endif %}
+</svg>
+{%- endmacro %}

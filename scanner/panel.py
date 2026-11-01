@@ -27,6 +27,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 import db
+import hardware  # marca/modelo/série dos discos (ícone + reconhecimento)
 import scan       # a varredura roda no MESMO processo (essencial para o .exe empacotado)
 import relatorio  # gera o relatório local (dashboard + planilhas) a partir dos manifestos
 import dedup      # planeja a deduplicação (fase 2) a partir dos manifestos
@@ -169,7 +170,29 @@ def discos_disponiveis():
                         texto = nome + (f"  ({_humano_tb(total)})" if total else "")
                         achados.append({"valor": full, "letra": "", "rotulo": nome,
                                         "tamanho": _humano_tb(total), "texto": texto})
-    return achados
+    return [_enriquecer(d) for d in achados]
+
+
+def _enriquecer(d):
+    """Acrescenta ao disco listado o que o próprio disco informa: marca, modelo,
+    tipo físico (para o ícone), nº de série e espaço livre. Se o nº de série bate
+    com a ficha de um HD já varrido, sugere a MESMA etiqueta (retomada segura,
+    sem depender de o operador redigitar o nome igualzinho)."""
+    import shutil
+    d = dict(d, hw=None, reconhecido=None, livre="", livre_pct=None)
+    try:
+        uso = shutil.disk_usage(d["valor"])
+        if uso.total:
+            d["livre"] = _humano_tb(uso.free)
+            d["livre_pct"] = round(100 * uso.free / uso.total, 1)
+    except Exception:
+        pass
+    try:
+        d["hw"] = hardware.info_para(d["valor"])
+        d["reconhecido"] = hardware.reconhecer(MANIFEST_DIR, d["hw"])
+    except Exception:
+        pass
+    return d
 
 
 def _aplicar_evento(ev):

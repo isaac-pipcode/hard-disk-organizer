@@ -464,6 +464,17 @@ def _ja_do_manifesto(caminho_jsonl: Path):
     return ja
 
 
+def _registrar_ficha(disco_label, raiz):
+    """Grava a ficha física do HD (marca, modelo, nº de série, tipo) ao lado do
+    manifesto: procedência do inventário e chave para reconhecer o HD depois.
+    Nunca impede a varredura — sem metadados, segue sem ficha."""
+    try:
+        import hardware
+        hardware.registrar(MANIFESTOS, disco_label, raiz)
+    except Exception:
+        pass
+
+
 def varrer(disco_label, raiz: Path, grupo=None, force=False):
     run_id = str(uuid.uuid4())
     MANIFESTOS.mkdir(parents=True, exist_ok=True)
@@ -474,6 +485,7 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
 
     db.registrar_disco(disco_label, grupo=grupo)
     db.abrir_run(run_id, disco_label)
+    _registrar_ficha(disco_label, raiz)
 
     # O que ja foi lido antes (para pular): banco (se online) + manifesto local
     # (offline). --force ignora tudo e revarre do zero.
@@ -697,6 +709,7 @@ def backfill(disco_label, raiz: Path):
         sys.exit(msg)
 
     db.registrar_disco(disco_label)
+    _registrar_ficha(disco_label, raiz)
     _emit({"event": "phase", "fase": "identificando"}, forcar=True)
 
     # Pré-passada única: conta os registros e detecta se ALGUM está sem formato.
