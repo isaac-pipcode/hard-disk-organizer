@@ -31,6 +31,7 @@ import db
 import hardware  # marca/modelo/série dos discos (ícone + reconhecimento)
 import acervo    # tela inicial: o estado de cada HD (cartões), sem banco
 import pacote    # pacote de envio (.zip) para o gestor do acervo
+import nomes     # nomes dos arquivos de cada HD (manifesto, ficha, registros)
 from versao import VERSAO
 import scan       # a varredura roda no MESMO processo (essencial para o .exe empacotado)
 import relatorio  # gera o relatório local (dashboard + planilhas) a partir dos manifestos
@@ -55,10 +56,14 @@ if getattr(sys, "frozen", False):
 else:
     _BASE_DADOS = Path.cwd()
 MANIFEST_DIR = Path(os.environ.get("MANIFEST_DIR") or (_BASE_DADOS / "manifestos"))
+# Pacotes .zip para o gestor do acervo — FORA da pasta de manifestos (que a
+# importação lê inteira).
+ENVIOS_DIR = Path(os.environ.get("ENVIOS_DIR") or (MANIFEST_DIR.parent / "envios"))
 
 app = FastAPI(title="PRESERVA-SCAN — Operacao")
 templates = Jinja2Templates(directory=_recurso("templates"))
 templates.env.globals["humano"] = relatorio.humano   # formatar bytes nos templates
+templates.env.filters["data_curta"] = acervo.data_curta   # ISO -> dd/mm/aaaa
 
 
 def _tem_manifestos():
@@ -244,7 +249,7 @@ def _sink(ev):
 
 def _rodar(disco, raiz, grupo, modo="varredura"):
     MANIFEST_DIR.mkdir(parents=True, exist_ok=True)
-    log_path = MANIFEST_DIR / f"operacao_{disco}_{time.strftime('%Y%m%d_%H%M%S')}.log"
+    log_path = nomes.novo_registro(MANIFEST_DIR, disco)
     JOB["log_path"] = str(log_path)
 
     # A varredura roda NESTE processo (nao ha 'python scan.py' externo — o que
@@ -321,9 +326,13 @@ def tela_registrar(request: Request, etiqueta: str = ""):
     sumir do controle (antes ficava só na planilha) e o gestor saber o sintoma."""
     etiqueta = etiqueta.strip()
     ficha = hardware.ler_ficha(MANIFEST_DIR, etiqueta) if etiqueta else {}
+    return _tela_registrar(request, etiqueta, ficha, hardware.nao_reconhecido(ficha) or {})
+
+
+def _tela_registrar(request, etiqueta, ficha, nr, erro=None, status_code=200):
     return templates.TemplateResponse(request, "registrar.html", _ctx(
-        ativo="acervo", etiqueta=etiqueta, ficha=ficha, sintomas=acervo.SINTOMAS,
-        nr=ficha.get("nao_reconhecido") or {}, erro=None, conhecidas=_etiquetas_conhecidas()))
+        ativo="acervo", etiqueta=etiqueta, ficha=ficha, nr=nr, erro=erro,
+        sintomas=acervo.SINTOMAS, conhecidas=_etiquetas_conhecidas()), status_code=status_code)
 
 
 def _etiquetas_conhecidas():
@@ -340,10 +349,8 @@ def registrar_hd(request: Request, etiqueta: str = Form(""), grupo: str = Form("
                  capacidade: str = Form(""), sintoma: str = Form(""), obs: str = Form("")):
     etiqueta = etiqueta.strip()
     if not importar._validar_etiqueta(etiqueta):
-        return templates.TemplateResponse(request, "registrar.html", _ctx(
-            ativo="acervo", etiqueta=etiqueta, ficha={}, sintomas=acervo.SINTOMAS,
-            nr={"sintoma": sintoma, "obs": obs}, conhecidas=_etiquetas_conhecidas(),
-            erro='Informe o nome do HD (sem os caracteres < > : " / \\ | ? *).'), status_code=400)
+        return _tela_registrar(request, etiqueta, {}, {"sintoma": sintoma, "obs": obs}, status_code=400,
+                               erro='Informe o nome do HD (sem os caracteres < > : " / \\ | ? *).')
     hardware.atualizar_ficha(
         MANIFEST_DIR, etiqueta, grupo=grupo.strip() or None,
         capacidade_nominal=capacidade.strip() or None,
@@ -357,7 +364,8 @@ def registrar_hd(request: Request, etiqueta: str = Form(""), grupo: str = Form("
 @app.post("/registrar/resolvido")
 def registrar_resolvido(etiqueta: str = Form("")):
     """O HD voltou a ser reconhecido (ou foi registrado por engano): tira a marca.
-    Quando ele for varrido, a marca também sai sozinha."""
+    Quando ele for lido de novo, a marca também deixa de valer sozinha
+    (hardware.nao_reconhecido)."""
     etiqueta = etiqueta.strip()
     if importar._validar_etiqueta(etiqueta):
         hardware.atualizar_ficha(MANIFEST_DIR, etiqueta, remover=("nao_reconhecido",))
@@ -370,7 +378,7 @@ def _tela_enviar(request, resultado=None, erro=None, status_code=200):
     sit = pacote.situacao_envio(MANIFEST_DIR, ENVIOS_DIR)
     discos = []
     for e, v in sit.items():
-        arq = MANIFEST_DIR / f"manifesto_{e}.jsonl"
+        arq = nomes.manifesto(MANIFEST_DIR, e)
         try:
             r = acervo.resumo_manifesto(arq)
             arquivos, volume = acervo._milhar(r["arquivos"]), acervo.humano(r["bytes"])
@@ -379,11 +387,10 @@ def _tela_enviar(request, resultado=None, erro=None, status_code=200):
         discos.append({"etiqueta": e, "pendente": v["pendente"], "em": v["em"] or "",
                        "arquivos": arquivos, "volume": volume,
                        "tamanho_manifesto": acervo.humano(arq.stat().st_size)})
-    avulsas = [a.name[len("disco_"):-len(".json")] for a in pacote.fichas_sem_inventario(MANIFEST_DIR)]
     return templates.TemplateResponse(request, "enviar.html", _ctx(
-        ativo="enviar", discos=discos, avulsas=avulsas, pacotes=pacote.pacotes(ENVIOS_DIR)[:10],
-        pasta=str(ENVIOS_DIR), resultado=resultado, erro=erro,
-        humano=acervo.humano), status_code=status_code)
+        ativo="enviar", discos=discos, avulsas=pacote.fichas_sem_inventario(MANIFEST_DIR),
+        pacotes=pacote.pacotes(ENVIOS_DIR)[:10], pasta=str(ENVIOS_DIR),
+        resultado=resultado, erro=erro, humano=acervo.humano), status_code=status_code)
 
 
 @app.get("/enviar", response_class=HTMLResponse)
@@ -392,14 +399,12 @@ def tela_enviar(request: Request):
 
 
 @app.post("/enviar", response_class=HTMLResponse)
-async def gerar_pacote(request: Request):
-    form = await request.form()
-    escolhidas = [v for k, v in form.multi_items() if k == "etiqueta"]
-    if not escolhidas:
+def gerar_pacote(request: Request, etiqueta: List[str] = Form([])):
+    # Rota síncrona (def): roda no threadpool — compactar GBs não trava o painel.
+    if not etiqueta:
         return _tela_enviar(request, erro="Marque pelo menos um HD para o pacote.", status_code=400)
     try:
-        import anyio
-        res = await anyio.to_thread.run_sync(pacote.gerar, MANIFEST_DIR, ENVIOS_DIR, escolhidas)
+        res = pacote.gerar(MANIFEST_DIR, ENVIOS_DIR, etiqueta)
     except Exception as e:
         return _tela_enviar(request, erro=f"Não foi possível gerar o pacote: {e}", status_code=500)
     return _tela_enviar(request, resultado=res)
@@ -551,7 +556,7 @@ def backfill(disco: str = Form(...), raiz: str = Form(...), subpasta: str = Form
 def _tela_importar(request, resultado=None, erro=None, status_code=200):
     return templates.TemplateResponse(request, "importar.html", _ctx(
         ativo="importar", resultado=resultado, erro=erro, pasta=str(MANIFEST_DIR),
-        existentes=sorted(p.stem[len("manifesto_"):] for p in MANIFEST_DIR.glob("manifesto_*.jsonl")),
+        existentes=list(nomes.manifestos(MANIFEST_DIR)),
     ), status_code=status_code)
 
 
@@ -621,7 +626,6 @@ def status():
 
 
 RELATORIO_DIR = MANIFEST_DIR / "relatorio"
-ENVIOS_DIR = MANIFEST_DIR.parent / "envios"   # pacotes .zip para o gestor do acervo
 
 
 @app.post("/relatorio")

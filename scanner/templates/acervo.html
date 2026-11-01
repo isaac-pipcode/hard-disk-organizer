@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_icones_hd.html" import icone_hd %}
+{% from "_icones_sit.html" import icone_sit %}
 {% block titulo %}Acervo — PRESERVA-SCAN{% endblock %}
 {% block head_extra %}
 <style>
@@ -9,7 +10,6 @@
   .topo .sub{ color:var(--muted); font-size:.9rem; }
   .acoes{ display:flex; flex-wrap:wrap; gap:.6rem; }
   .btn{ display:inline-flex; align-items:center; gap:.45rem; min-height:44px; }
-  .ico{ width:18px; height:18px; flex:none; }
 
   .kpis{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:.8rem; margin-bottom:1rem; }
   .kpi2{ display:flex; align-items:center; gap:.85rem; background:var(--surface); border:1px solid var(--line);
@@ -46,9 +46,6 @@
           justify-content:center; flex:none; }
   .c-info{ flex:1; min-width:0; display:flex; flex-direction:column; gap:.3rem; }
   .linha-etq{ display:flex; flex-wrap:wrap; gap:.35rem; align-items:center; }
-  .etq{ display:inline-flex; align-items:center; gap:.42rem; padding:.08rem .6rem .08rem .45rem; border:1.5px solid var(--ink);
-        border-radius:7px; font-weight:800; font-size:.95rem; letter-spacing:.02em; background:var(--surface); }
-  .etq::before{ content:""; width:.45rem; height:.45rem; border-radius:50%; border:1.5px solid var(--ink); }
   .etq.vazia{ border-style:dashed; border-color:var(--muted); color:var(--muted); font-weight:700; }
   .etq.vazia::before{ border-color:var(--muted); }
   .grupo{ display:inline-flex; align-items:center; gap:.35rem; padding:.05rem .5rem; border-radius:999px;
@@ -99,19 +96,6 @@
 </style>
 {% endblock %}
 
-{% macro icone_sit(s) -%}
-<svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-{%- if s == 'concluido' %}<path d="M5 12l5 5 9-10"/>
-{%- elif s == 'incompleta' %}<circle cx="12" cy="12" r="9"/><path d="M10 9v6"/><path d="M14 9v6"/>
-{%- elif s == 'completar' %}<circle cx="12" cy="12" r="9"/><path d="M12 8v8"/><path d="M8 12h8"/>
-{%- elif s == 'a_varrer' %}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
-{%- elif s == 'novo' %}<path d="M12 5v14"/><path d="M5 12h14"/>
-{%- elif s == 'enviar' %}<path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>
-{%- elif s == 'nao_reconhecido' %}<path d="M9 7V3"/><path d="M15 7V3"/><path d="M6 7h12v4a6 6 0 0 1-12 0V7z"/><path d="M12 17v4"/><path d="M3 3l18 18"/>
-{%- else %}<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>{% endif %}
-</svg>
-{%- endmacro %}
-
 {% block conteudo %}
   <div class="topo">
     <div>
@@ -120,8 +104,8 @@
     </div>
     <div class="acoes">
       <a class="btn" href="/varrer"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>Varrer um HD</a>
-      <a class="btn ghost" href="/enviar"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>Enviar resultados{% if kpi and kpi.para_enviar %} ({{ kpi.para_enviar }}){% endif %}</a>
-      <a class="btn ghost" href="/registrar"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7V3"/><path d="M15 7V3"/><path d="M6 7h12v4a6 6 0 0 1-12 0V7z"/><path d="M12 17v4"/><path d="M3 3l18 18"/></svg>Registrar HD não reconhecido</a>
+      <a class="btn ghost" href="/enviar">{{ icone_sit('enviar') }}Enviar resultados{% if kpi and kpi.para_enviar %} ({{ kpi.para_enviar }}){% endif %}</a>
+      <a class="btn ghost" href="/registrar">{{ icone_sit('nao_reconhecido') }}Registrar HD não reconhecido</a>
     </div>
   </div>
 
@@ -226,7 +210,7 @@
         {% elif c.situacao == 'completar' %}<a class="c-acao prim" href="/varrer?etiqueta={{ et }}&amp;completar=1">Completar dados</a>
         {% elif c.situacao == 'a_varrer' %}<a class="c-acao sec" href="/varrer?etiqueta={{ et }}"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8V4z"/></svg>Varrer agora</a>
         {% elif c.situacao == 'novo' %}<a class="c-acao prim" href="/varrer">Dar nome e varrer</a>
-        {% elif c.situacao == 'enviar' %}<a class="c-acao prim" href="/enviar"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>Gerar pacote para envio</a>
+        {% elif c.situacao == 'enviar' %}<a class="c-acao prim" href="/enviar">{{ icone_sit('enviar') }}Gerar pacote para envio</a>
         {% elif c.situacao == 'nao_reconhecido' %}<a class="c-acao prim" href="/registrar?etiqueta={{ et }}">Ver o que fazer</a>
         <a class="c-extra" href="/varrer?etiqueta={{ et }}">Voltou a aparecer? Varrer agora</a>
         {% else %}<a class="c-acao sec" href="/passo/relatorio">Ver no relatório</a>{% endif %}

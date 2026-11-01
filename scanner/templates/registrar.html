@@ -16,8 +16,7 @@
             border-radius:12px; background:var(--surface); cursor:pointer; font-weight:600; font-size:.9rem; margin:0; min-height:44px; }
   .sintoma:has(input:checked){ border:2px solid var(--accent); padding:calc(.8rem - 1px) calc(.9rem - 1px); background:var(--accent-soft); }
   .sintoma input{ width:auto; margin:0; accent-color:var(--accent); }
-  .cab{ display:flex; gap:1rem; align-items:center; margin-bottom:1rem; }
-  .ico{ width:20px; height:20px; }
+  .passo .ico, .nunca .ico{ width:20px; height:20px; }
 </style>
 {% endblock %}
 {% block conteudo %}
@@ -87,7 +86,7 @@
     {% if nr and etiqueta %}
     <form method="post" action="/registrar/resolvido" style="margin-top:1rem;border-top:1px solid var(--line);padding-top:1rem">
       <input type="hidden" name="etiqueta" value="{{ etiqueta }}">
-      <span class="ajuda">Registrado em {{ (nr.em or '')[:10] }}. O HD voltou a funcionar, ou foi registrado por engano?</span>
+      <span class="ajuda">Registrado em {{ nr.em | data_curta }}. O HD voltou a funcionar, ou foi registrado por engano?</span>
       <button class="btn sec" type="submit">Retirar a marca de “não reconhecido”</button>
     </form>
     {% endif %}

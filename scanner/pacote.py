@@ -17,15 +17,18 @@ O registro do que já foi empacotado fica em <envios>/registro.json: um inventá
 que muda depois (ex.: "Completar dados") volta a ficar "pronto para enviar".
 """
 import datetime
-import glob
 import hashlib
 import json
 import os
 import re
+import shutil
 import socket
 import zipfile
 from pathlib import Path
 
+import hardware
+import nomes
+from scan import CHUNK, sha256_de
 from versao import VERSAO
 
 REGISTRO = "registro.json"
@@ -47,12 +50,26 @@ que nada se corrompeu no caminho.
 """
 
 
-def _sha256(caminho):
-    h = hashlib.sha256()
-    with open(caminho, "rb") as f:
-        for bloco in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(bloco)
-    return h.hexdigest()
+class _Hasher:
+    """Arquivo-só-leitura que calcula o SHA-256 do que é lido por ele."""
+    def __init__(self, f):
+        self.f, self.h = f, hashlib.sha256()
+
+    def read(self, n=-1):
+        bloco = self.f.read(n)
+        self.h.update(bloco)
+        return bloco
+
+
+def _incluir(z, arquivo):
+    """Põe `arquivo` no zip (em manifestos/) lendo-o UMA vez só: o SHA-256 sai
+    da mesma leitura que comprime — manifestos têm centenas de MB."""
+    info = zipfile.ZipInfo.from_file(arquivo, arcname=f"manifestos/{arquivo.name}")
+    info.compress_type = zipfile.ZIP_DEFLATED
+    with open(arquivo, "rb") as origem, z.open(info, "w", force_zip64=True) as destino:
+        leitor = _Hasher(origem)
+        shutil.copyfileobj(leitor, destino, CHUNK)
+    return {"arquivo": arquivo.name, "bytes": info.file_size, "sha256": leitor.h.hexdigest()}
 
 
 def _marca_manifesto(caminho):
@@ -79,22 +96,16 @@ def ler_registro(envios_dir):
 
 
 def etiquetas(manifest_dir):
-    pasta = Path(manifest_dir)
-    if not pasta.exists():
-        return []
-    return sorted((a.name[len("manifesto_"):-len(".jsonl")] for a in pasta.glob("manifesto_*.jsonl")),
-                  key=str.lower)
+    return list(nomes.manifestos(manifest_dir))
 
 
 def fichas_sem_inventario(manifest_dir):
-    """Fichas (disco_<etiqueta>.json) de HDs que ainda não têm inventário aqui."""
+    """Etiquetas dos HDs que têm ficha mas ainda não têm inventário aqui
+    (não reconhecidos, na fila para varrer)."""
     pasta = Path(manifest_dir)
-    if not pasta.exists():
+    if not pasta.is_dir():
         return []
-    com_inventario = set(etiquetas(pasta))
-    return sorted((a for a in pasta.glob("disco_*.json")
-                   if a.name[len("disco_"):-len(".json")] not in com_inventario),
-                  key=lambda a: a.name.lower())
+    return sorted(set(hardware.fichas(pasta)) - set(nomes.manifestos(pasta)), key=str.lower)
 
 
 def situacao_envio(manifest_dir, envios_dir):
@@ -104,7 +115,7 @@ def situacao_envio(manifest_dir, envios_dir):
     out = {}
     for e in etiquetas(manifest_dir):
         r = reg.get(e) or {}
-        atual = _marca_manifesto(Path(manifest_dir) / f"manifesto_{e}.jsonl")
+        atual = _marca_manifesto(nomes.manifesto(manifest_dir, e))
         out[e] = {"pendente": r.get("marca") != atual, "em": r.get("em"), "pacote": r.get("pacote")}
     return out
 
@@ -123,7 +134,8 @@ def gerar(manifest_dir, envios_dir, selecionadas=None):
 
     envios_dir.mkdir(parents=True, exist_ok=True)
     agora = datetime.datetime.now()
-    nome = f"PRESERVA-SCAN_{_maquina()}_{agora:%Y-%m-%d_%H%M}.zip"
+    maquina = _maquina()
+    nome = f"PRESERVA-SCAN_{maquina}_{agora:%Y-%m-%d_%H%M}.zip"
     destino = envios_dir / nome
     n = 1
     while destino.exists():
@@ -131,30 +143,20 @@ def gerar(manifest_dir, envios_dir, selecionadas=None):
         destino = envios_dir / nome.replace(".zip", f"_{n}.zip")
     tmp = destino.with_name(destino.name + ".parcial")
 
-    manifestacao = {"gerado_em": agora.isoformat(timespec="seconds"), "maquina": _maquina(),
+    manifestacao = {"gerado_em": agora.isoformat(timespec="seconds"), "maquina": maquina,
                     "versao_programa": VERSAO, "discos": []}
     marcas = {}
     with zipfile.ZipFile(tmp, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as z:
         for e in selecionadas:
-            arquivos = [manifest_dir / f"manifesto_{e}.jsonl"]
-            ficha = manifest_dir / f"disco_{e}.json"
-            if ficha.exists():
-                arquivos.append(ficha)
-            padrao = os.path.join(glob.escape(str(manifest_dir)), f"operacao_{glob.escape(e)}_*.log")
-            arquivos += [Path(p) for p in sorted(glob.glob(padrao))]
-            itens = []
-            for a in arquivos:
-                z.write(a, arcname=f"manifestos/{a.name}")
-                itens.append({"arquivo": a.name, "bytes": a.stat().st_size, "sha256": _sha256(a)})
-            marcas[e] = _marca_manifesto(arquivos[0])
-            manifestacao["discos"].append({"etiqueta": e, "arquivos": itens})
+            manifesto = nomes.manifesto(manifest_dir, e)
+            marcas[e] = _marca_manifesto(manifesto)
+            ficha = nomes.ficha(manifest_dir, e)
+            arquivos = [manifesto] + ([ficha] if ficha.exists() else []) + nomes.registros(manifest_dir, e)
+            manifestacao["discos"].append({"etiqueta": e, "arquivos": [_incluir(z, a) for a in arquivos]})
         # Fichas de HDs sem inventário (ex.: "não reconhecido", ou na fila para
         # varrer) vão sempre: são pequenas e é assim que o gestor fica sabendo deles.
-        avulsas = []
-        for a in fichas_sem_inventario(manifest_dir):
-            z.write(a, arcname=f"manifestos/{a.name}")
-            avulsas.append({"arquivo": a.name, "bytes": a.stat().st_size, "sha256": _sha256(a)})
-        manifestacao["fichas_sem_inventario"] = avulsas
+        manifestacao["fichas_sem_inventario"] = [_incluir(z, nomes.ficha(manifest_dir, e))
+                                                 for e in fichas_sem_inventario(manifest_dir)]
         z.writestr("pacote.json", json.dumps(manifestacao, ensure_ascii=False, indent=2))
         z.writestr("LEIAME.txt", LEIAME)
     os.replace(tmp, destino)
@@ -164,8 +166,8 @@ def gerar(manifest_dir, envios_dir, selecionadas=None):
         reg[e] = {"marca": marca, "em": agora.isoformat(timespec="seconds"), "pacote": destino.name}
     (envios_dir / REGISTRO).write_text(json.dumps(reg, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"arquivo": str(destino), "nome": destino.name, "discos": selecionadas,
-            "fichas_sem_inventario": len(avulsas),
-            "bytes": destino.stat().st_size, "sha256": _sha256(destino)}
+            "fichas_sem_inventario": len(manifestacao["fichas_sem_inventario"]),
+            "bytes": destino.stat().st_size, "sha256": sha256_de(destino)}
 
 
 def pacotes(envios_dir):

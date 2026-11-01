@@ -13,21 +13,18 @@ Situação de cada HD:
   concluido    inventário completo
   novo         HD ligado agora que ainda não está no catálogo
 """
-import glob
 import json
-import os
 from pathlib import Path
 
 import hardware
+import nomes
 from scan import EXT_VIDEO_AUDIO, EXT_IMAGEM
 
 _CACHE = {}   # caminho do manifesto -> ((mtime, tamanho), resumo)
 
 GRUPOS = {"antigos": "Antigo", "uso_continuo": "Uso contínuo", "transporte": "Transporte"}
 
-ORDEM = ["varrendo", "incompleta", "nao_reconhecido", "novo", "completar", "enviar",
-         "a_varrer", "concluido"]
-SECOES = {
+SECOES = {   # na ordem em que aparecem (prioridade)
     "varrendo": "Em andamento",
     "incompleta": "Precisam de você",
     "nao_reconhecido": "Não reconhecidos",
@@ -37,6 +34,7 @@ SECOES = {
     "a_varrer": "Na fila para varrer",
     "concluido": "Concluídos",
 }
+ORDEM = list(SECOES)
 
 # Sintomas de um HD que o computador não reconhece (tela "Registrar HD").
 SINTOMAS = {
@@ -60,7 +58,10 @@ def humano(n, base=1000):
         n /= base
 
 
-def _data_curta(iso):
+def data_curta(iso):
+    """'2026-10-30T14:05:00' -> '30/10/2026' (também usado como filtro nos templates)."""
+    if not iso:
+        return ""
     try:
         y, m, d = iso[:10].split("-")
         return f"{d}/{m}/{y}"
@@ -116,10 +117,9 @@ def resumo_manifesto(arq):
 def _status_por_log(pasta, etiqueta):
     """Para inventários de antes da ficha: lê o registro da última VARREDURA
     deste HD. 'concluida', 'falhou', 'interrompida' ou None (sem registro)."""
-    padrao = os.path.join(glob.escape(str(pasta)), f"operacao_{glob.escape(etiqueta)}_*.log")
-    for log in sorted(glob.glob(padrao), reverse=True):
+    for log in reversed(nomes.registros(pasta, etiqueta)):
         try:
-            txt = Path(log).read_text(encoding="utf-8", errors="replace")
+            txt = log.read_text(encoding="utf-8", errors="replace")
         except Exception:
             continue
         if not txt.startswith("=== varredura"):
@@ -165,8 +165,7 @@ def montar(pasta, job=None, conectados=None, envio=None):
     envio = envio or {}
     pasta = Path(pasta)
     fichas = hardware.fichas(pasta) if pasta.exists() else {}
-    manifestos = {a.name[len("manifesto_"):-len(".jsonl")]: a
-                  for a in pasta.glob("manifesto_*.jsonl")} if pasta.exists() else {}
+    manifestos = nomes.manifestos(pasta)
     ligados = {}
     novos = []
     for d in conectados or []:
@@ -201,7 +200,8 @@ def montar(pasta, job=None, conectados=None, envio=None):
 
         estado = (ficha.get("varredura") or {}).get("status") or _status_por_log(pasta, etiqueta)
         em_job = bool(job and job.get("disco") == etiqueta)
-        nr = ficha.get("nao_reconhecido")
+        nr = hardware.nao_reconhecido(ficha)
+        env = envio.get(etiqueta) if r else None
         if em_job:
             c["situacao"] = "varrendo"
             c["titulo"] = job.get("fase") or "Varrendo"
@@ -209,7 +209,7 @@ def montar(pasta, job=None, conectados=None, envio=None):
         elif nr:
             c["situacao"] = "nao_reconhecido"
             c["titulo"] = "Não reconhecido"
-            c["detalhe"] = SINTOMAS.get(nr.get("sintoma"), "") if isinstance(nr, dict) else ""
+            c["detalhe"] = SINTOMAS.get(nr.get("sintoma"), "")
         elif estado in ("falhou", "em_andamento", "interrompida") or (r and r["sem_hash"]):
             c["situacao"] = "incompleta"
             c["titulo"] = "Varredura incompleta"
@@ -231,20 +231,16 @@ def montar(pasta, job=None, conectados=None, envio=None):
             if r["av_sem"] or r["img_sem"]:
                 partes.append(f"{_milhar(r['av_sem'] + r['img_sem'])} sem dados de mídia")
             c["detalhe"] = " · ".join(partes)
+        elif env and env["pendente"]:
+            c["situacao"] = "enviar"
+            c["titulo"] = "Pronto para enviar"
+            c["detalhe"] = "Mudou desde o último pacote" if env.get("em") else "Concluído · ainda não enviado"
         else:
             c["situacao"] = "concluido"
             c["titulo"] = "Concluído e completo"
-        env = envio.get(etiqueta)
-        if r and env:
-            if env["pendente"] and c["situacao"] == "concluido":
-                c["situacao"] = "enviar"
-                c["titulo"] = "Pronto para enviar"
-                c["detalhe"] = ("Mudou desde o último pacote" if env.get("em")
-                                else "Concluído · ainda não enviado")
-            elif env["pendente"]:
-                c["nao_enviado"] = True
-            elif c["situacao"] == "concluido" and env.get("em"):
-                c["detalhe"] = "Incluído no pacote de " + _data_curta(env["em"])
+            if env and env.get("em"):
+                c["detalhe"] = "Incluído no pacote de " + data_curta(env["em"])
+        c["nao_enviado"] = bool(env and env["pendente"]) and c["situacao"] != "enviar"
         cartoes.append(c)
 
     for d in novos:
@@ -275,7 +271,6 @@ def montar(pasta, job=None, conectados=None, envio=None):
             "concluidos": sum(1 for c in catalogo if c["situacao"] in ("concluido", "enviar")),
             "pouco_espaco": sum(1 for c in cartoes if c["livre_pct"] is not None and c["livre_pct"] < 10),
             "para_enviar": sum(1 for e, v in envio.items() if v.get("pendente")),
-            "nao_reconhecidos": sum(1 for c in catalogo if c["situacao"] == "nao_reconhecido"),
             "arquivos": _milhar(total_arquivos),
         },
         "novos": len([c for c in cartoes if c["situacao"] == "novo"]),

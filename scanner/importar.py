@@ -39,6 +39,8 @@ import zipfile
 import argparse
 from pathlib import Path
 
+import hardware   # fichas dos HDs que vêm no pacote de envio
+
 CAMPOS_CSV = ["disco_label", "caminho", "nome", "extensao", "tamanho_bytes",
               "mtime", "sha256", "puid", "formato"]
 # Caracteres que não podem ir no nome de arquivo (Windows) — a etiqueta vira parte
@@ -46,15 +48,20 @@ CAMPOS_CSV = ["disco_label", "caminho", "nome", "extensao", "tamanho_bytes",
 _PROIBIDOS = set('<>:"/\\|?*')
 
 
+def _base(nome):
+    """Só o nome do arquivo — vale para caminhos do Windows e de dentro do zip."""
+    return os.path.basename(nome.replace("\\", "/"))
+
+
 def _eh_manifesto(nome):
-    base = os.path.basename(nome.replace("\\", "/"))
+    base = _base(nome)
     return base.startswith("manifesto_") and base.lower().endswith((".jsonl", ".csv"))
 
 
 def _eh_extra(nome):
     """Ficha do HD (disco_<etiqueta>.json) ou registro de operação
     (operacao_<etiqueta>_<data>.log) — vêm no pacote de envio do PRESERVA-SCAN."""
-    base = os.path.basename(nome.replace("\\", "/"))
+    base = _base(nome)
     return ((base.startswith("disco_") and base.lower().endswith(".json")) or
             (base.startswith("operacao_") and base.lower().endswith(".log")))
 
@@ -91,7 +98,7 @@ def _fontes_de_zip(caminho_zip: Path):
             with zipfile.ZipFile(caminho_zip) as z:
                 return z.read(m)
         # Só o nome-base: nunca usa o caminho interno do zip para gravar.
-        fontes.append((os.path.basename(m.replace("\\", "/")), obter))
+        fontes.append((_base(m), obter))
     return fontes
 
 
@@ -263,49 +270,39 @@ def importar(fontes, manifest_dir, substituir=False):
 def _importar_extras(extras, manifest_dir, erros):
     """Fichas dos HDs (marca, modelo, série, grupo, situação — inclusive HDs
     "não reconhecidos", que não têm inventário) e registros de operação. A ficha
-    que chega é mesclada à local (o que vem prevalece; o histórico de quando o HD
-    foi visto é somado). Registro só é copiado se ainda não existir aqui."""
+    que chega é mesclada à local (hardware.mesclar_ficha). Registro só é copiado
+    se ainda não existir aqui — e só então é lido do pacote."""
     fichas = registros = 0
     for nome, obter in extras:
-        base = os.path.basename(nome.replace("\\", "/"))
+        base = _base(nome)
+        eh_ficha = base.startswith("disco_")
+        if not eh_ficha:
+            if not _validar_etiqueta(base[:-len(".log")]):
+                erros.append(f"{base}: nome de registro inválido — ignorado")
+                continue
+            if (manifest_dir / base).exists():
+                continue
         try:
             dados = obter()
         except Exception as e:
             erros.append(f"{base}: não foi possível ler ({type(e).__name__}: {e})")
             continue
-        if base.startswith("disco_"):
-            try:
-                nova = json.loads(dados.decode("utf-8"))
-                assert isinstance(nova, dict)
-            except Exception:
-                erros.append(f"{base}: ficha do HD inválida — ignorada")
-                continue
-            label = nova.get("etiqueta") or base[len("disco_"):-len(".json")]
-            if not _validar_etiqueta(label):
-                erros.append(f"{base}: etiqueta inválida na ficha: {label!r}")
-                continue
-            destino = manifest_dir / f"disco_{label}.json"
-            atual = {}
-            if destino.exists():
-                try:
-                    atual = json.loads(destino.read_text(encoding="utf-8"))
-                except Exception:
-                    atual = {}
-            vistos = sorted(set((atual.get("visto_em") or []) + (nova.get("visto_em") or [])))
-            atual.update(nova)
-            atual["etiqueta"] = label
-            if vistos:
-                atual["visto_em"] = vistos[-50:]
-            destino.write_text(json.dumps(atual, ensure_ascii=False, indent=2), encoding="utf-8")
+        if not eh_ficha:
+            (manifest_dir / base).write_bytes(dados)
+            registros += 1
+            continue
+        try:
+            nova = json.loads(dados.decode("utf-8"))
+            assert isinstance(nova, dict)
+        except Exception:
+            erros.append(f"{base}: ficha do HD inválida — ignorada")
+            continue
+        label = nova.get("etiqueta") or base[len("disco_"):-len(".json")]
+        if not _validar_etiqueta(label):
+            erros.append(f"{base}: etiqueta inválida na ficha: {label!r}")
+            continue
+        if hardware.mesclar_ficha(manifest_dir, label, nova) is not None:
             fichas += 1
-        else:
-            if not _validar_etiqueta(base[:-4]):
-                erros.append(f"{base}: nome de registro inválido — ignorado")
-                continue
-            destino = manifest_dir / base
-            if not destino.exists():
-                destino.write_bytes(dados)
-                registros += 1
     return fichas, registros
 
 
