@@ -28,6 +28,7 @@ hiddenimports += [
     "consolidado",               # mapa entre discos (o que esta repetido onde) (panel)
     "executar",                  # execucao guiada da limpeza (quarentena) (panel)
     "hardware",                  # marca/modelo/serie dos discos (icones + reconhecimento)
+    "acervo",                    # tela inicial: cartoes com o estado de cada HD
     "importar",                  # importacao de manifestos de outras maquinas (panel)
     "dotenv",                    # carrega .env ao lado do .exe (DATABASE_URL do Supabase)
     "multipart",                 # python-multipart (formularios do painel)

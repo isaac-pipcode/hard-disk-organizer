@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% from "_icones_hd.html" import icone_hd %}
+{% block titulo %}Acervo — PRESERVA-SCAN{% endblock %}
+{% block head_extra %}
+<style>
+  main{ max-width:1180px; }
+  .topo{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.2rem; }
+  .topo h1{ margin:0; font-size:1.75rem; }
+  .topo .sub{ color:var(--muted); font-size:.9rem; }
+  .acoes{ display:flex; flex-wrap:wrap; gap:.6rem; }
+  .btn{ display:inline-flex; align-items:center; gap:.45rem; min-height:44px; }
+  .ico{ width:18px; height:18px; flex:none; }
+
+  .kpis{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:.8rem; margin-bottom:1rem; }
+  .kpi2{ display:flex; align-items:center; gap:.85rem; background:var(--surface); border:1px solid var(--line);
+         border-radius:16px; padding:.9rem 1rem; }
+  .kpi2 .n{ font-size:1.6rem; font-weight:800; line-height:1.1; }
+  .kpi2 .n small{ font-size:.95rem; font-weight:650; color:var(--muted); }
+  .kpi2 .r{ font-size:.85rem; color:var(--muted); }
+  .bolha{ width:48px; height:48px; border-radius:14px; display:flex; align-items:center; justify-content:center; flex:none; }
+  .b-warn{ background:var(--warn-soft); color:var(--warn); } .b-ok{ background:var(--ok-soft); color:var(--ok); }
+  .b-err{ background:var(--err-soft); color:var(--err); } .b-acc{ background:var(--accent-soft); color:var(--accent-ink); }
+
+  .barra-ferr{ display:flex; flex-wrap:wrap; gap:.55rem; align-items:center; background:var(--surface);
+               border:1px solid var(--line); border-radius:14px; padding:.45rem; margin-bottom:1.4rem; }
+  .busca{ flex:1 1 240px; display:flex; align-items:center; gap:.55rem; min-height:44px; padding:0 .75rem;
+          border-radius:10px; background:var(--surface2); color:var(--muted); }
+  .busca input{ flex:1; min-width:0; border:0; background:transparent; padding:0; font-size:.95rem; }
+  .busca input:focus{ outline:none; }
+  .busca:focus-within{ outline:2px solid var(--accent); }
+  .seg{ display:flex; flex-wrap:wrap; gap:3px; padding:3px; border-radius:12px; background:var(--surface2); }
+  .seg button{ min-height:40px; padding:0 .8rem; border:0; border-radius:9px; background:transparent; color:var(--muted);
+               font:inherit; font-size:.88rem; font-weight:650; cursor:pointer; }
+  .seg button[aria-pressed="true"]{ background:var(--surface); color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.14); }
+  .seg button.ic{ width:44px; padding:0; display:flex; align-items:center; justify-content:center; }
+
+  .secao{ margin:0 0 1.6rem; }
+  .secao h2{ display:flex; align-items:center; gap:.55rem; margin:0 0 .7rem; font-size:1.1rem; }
+  .cont{ font-size:.78rem; font-weight:700; padding:.05rem .55rem; border-radius:999px; }
+  .grade{ display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:.85rem; }
+  .cartao{ background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:1rem;
+           display:flex; flex-direction:column; gap:.75rem; box-shadow:0 1px 2px rgba(0,0,0,.05); }
+  .cartao.ativo{ border:2px solid var(--accent); padding:calc(1rem - 1px); }
+  .c-topo{ display:flex; gap:.85rem; align-items:flex-start; }
+  .palco{ width:72px; height:72px; border-radius:14px; background:var(--bg); display:flex; align-items:center;
+          justify-content:center; flex:none; }
+  .c-info{ flex:1; min-width:0; display:flex; flex-direction:column; gap:.3rem; }
+  .linha-etq{ display:flex; flex-wrap:wrap; gap:.35rem; align-items:center; }
+  .etq{ display:inline-flex; align-items:center; gap:.42rem; padding:.08rem .6rem .08rem .45rem; border:1.5px solid var(--ink);
+        border-radius:7px; font-weight:800; font-size:.95rem; letter-spacing:.02em; background:var(--surface); }
+  .etq::before{ content:""; width:.45rem; height:.45rem; border-radius:50%; border:1.5px solid var(--ink); }
+  .etq.vazia{ border-style:dashed; border-color:var(--muted); color:var(--muted); font-weight:700; }
+  .etq.vazia::before{ border-color:var(--muted); }
+  .grupo{ display:inline-flex; align-items:center; gap:.35rem; padding:.05rem .5rem; border-radius:999px;
+          background:var(--surface2); color:var(--muted); font-size:.74rem; font-weight:650; }
+  .grupo i{ width:.45rem; height:.45rem; border-radius:50%; display:inline-block; }
+  .g-antigos{ background:#8a6d3b; } .g-uso_continuo{ background:#2b6ca3; } .g-transporte{ background:#1e6b3a; }
+  .letra{ font-size:.74rem; font-weight:700; color:var(--muted); border:1px solid var(--line); border-radius:6px; padding:0 .35rem; }
+  .marca{ font-weight:650; font-size:.95rem; line-height:1.3; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .marca.pendente{ color:var(--muted); font-weight:600; font-size:.86rem; }
+  .meta{ color:var(--muted); font-size:.8rem; }
+  .sit{ display:flex; align-items:flex-start; gap:.6rem; padding:.6rem .75rem; border-radius:10px; font-size:.86rem; }
+  .sit b{ display:block; } .sit span{ font-size:.8rem; opacity:.92; }
+  .s-varrendo,.s-novo{ background:var(--accent-soft); color:var(--accent-ink); }
+  .s-incompleta{ background:var(--err-soft); color:var(--err); }
+  .s-completar{ background:var(--warn-soft); color:var(--warn); }
+  .s-a_varrer{ background:var(--surface2); color:var(--muted); }
+  .s-concluido{ background:var(--ok-soft); color:var(--ok); }
+  .prog{ height:7px; border-radius:999px; background:var(--surface); overflow:hidden; margin-top:.35rem; }
+  .prog span{ display:block; height:100%; background:var(--accent); }
+  .espaco .trilho{ height:7px; border-radius:999px; background:var(--line); overflow:hidden; }
+  .espaco .trilho span{ display:block; height:100%; background:#8a919c; }
+  .espaco.cheio .trilho span{ background:var(--err); }
+  .espaco .leg{ display:flex; justify-content:space-between; font-size:.78rem; color:var(--muted); margin-top:.3rem; }
+  .espaco.cheio .leg{ color:var(--err); font-weight:650; }
+  .c-acao{ display:flex; align-items:center; justify-content:center; gap:.45rem; min-height:44px; border-radius:10px;
+           font-weight:650; font-size:.92rem; text-decoration:none; }
+  .c-acao.prim{ background:var(--accent); color:#fff; }
+  .c-acao.sec{ background:var(--surface); border:1px solid var(--line); color:var(--ink); }
+  .c-acao:hover{ filter:brightness(1.05); }
+  .vazio{ text-align:center; padding:2.5rem 1rem; }
+
+  /* Modo lista: o mesmo cartão, em uma linha */
+  .lista .grade{ grid-template-columns:1fr; gap:.5rem; }
+  .lista .cartao{ flex-direction:row; flex-wrap:wrap; align-items:center; padding:.6rem .8rem; gap:.6rem 1rem; }
+  .lista .c-topo{ flex:1 1 320px; align-items:center; }
+  .lista .palco{ width:48px; height:48px; }
+  .lista .palco svg{ width:38px; height:38px; }
+  .lista .sit{ flex:1 1 220px; }
+  .lista .espaco{ flex:0 1 180px; }
+  .lista .c-acao{ flex:0 0 auto; padding:0 1rem; }
+  [hidden]{ display:none !important; }
+</style>
+{% endblock %}
+
+{% macro icone_sit(s) -%}
+<svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+{%- if s == 'concluido' %}<path d="M5 12l5 5 9-10"/>
+{%- elif s == 'incompleta' %}<circle cx="12" cy="12" r="9"/><path d="M10 9v6"/><path d="M14 9v6"/>
+{%- elif s == 'completar' %}<circle cx="12" cy="12" r="9"/><path d="M12 8v8"/><path d="M8 12h8"/>
+{%- elif s == 'a_varrer' %}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+{%- elif s == 'novo' %}<path d="M12 5v14"/><path d="M5 12h14"/>
+{%- else %}<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>{% endif %}
+</svg>
+{%- endmacro %}
+
+{% block conteudo %}
+  <div class="topo">
+    <div>
+      <h1>Acervo</h1>
+      <div class="sub">O estado de cada HD, lido dos inventários deste computador — funciona sem internet.</div>
+    </div>
+    <div class="acoes">
+      <a class="btn" href="/varrer"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>Varrer um HD</a>
+      <a class="btn ghost" href="/passo/relatorio"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V10"/><path d="M12 20V4"/><path d="M19 20v-7"/></svg>Relatório</a>
+    </div>
+  </div>
+
+  {% if erro %}<div class="aviso a-err">Não foi possível montar o acervo: {{ erro }}</div>{% endif %}
+
+  {% if not secoes %}
+  <div class="card vazio">
+    <div style="display:flex;justify-content:center;margin-bottom:.8rem">{{ icone_hd('portatil', 88, 'HD') }}</div>
+    <h2 style="margin:.2rem 0">Ainda não há HDs no acervo</h2>
+    <p class="muted">Ligue o primeiro HD e faça a varredura — ou traga inventários feitos em outro computador.</p>
+    <div class="btn-row" style="justify-content:center">
+      <a class="btn" href="/varrer">Varrer o primeiro HD</a>
+      <a class="btn ghost" href="/passo/importar">Importar manifestos</a>
+    </div>
+  </div>
+  {% else %}
+
+  <section class="kpis" aria-label="Indicadores">
+    {% set pct = (100 * kpi.varridos / kpi.hds) if kpi.hds else 0 %}
+    <div class="kpi2">
+      <svg role="img" aria-label="{{ kpi.varridos }} de {{ kpi.hds }} HDs varridos" width="48" height="48" viewBox="0 0 52 52" style="flex:none">
+        <circle cx="26" cy="26" r="20" fill="none" stroke="var(--line)" stroke-width="7"/>
+        <circle cx="26" cy="26" r="20" fill="none" stroke="var(--ok)" stroke-width="7" stroke-linecap="round"
+                stroke-dasharray="{{ (125.66 * pct / 100) | round(1) }} 125.66" transform="rotate(-90 26 26)"/>
+      </svg>
+      <div><div class="n">{{ kpi.varridos }} <small>de {{ kpi.hds }}</small></div><div class="r">HDs com inventário · {{ kpi.arquivos }} arquivos</div></div>
+    </div>
+    <div class="kpi2"><span class="bolha b-warn">{{ icone_sit('completar') }}</span><div><div class="n">{{ kpi.atencao }}</div><div class="r">pedem atenção</div></div></div>
+    <div class="kpi2"><span class="bolha b-ok">{{ icone_sit('concluido') }}</span><div><div class="n">{{ kpi.concluidos }}</div><div class="r">concluídos e completos</div></div></div>
+    <div class="kpi2"><span class="bolha b-err"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 10v4"/><path d="M6 10v4"/></svg></span><div><div class="n">{{ kpi.pouco_espaco }}</div><div class="r">com menos de 10% livre</div></div></div>
+  </section>
+
+  <div class="barra-ferr" role="toolbar" aria-label="Busca e filtros do acervo">
+    <label class="busca">
+      <svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <input id="busca" type="search" aria-label="Buscar HD" placeholder="Buscar por etiqueta, marca ou modelo">
+    </label>
+    <div class="seg" role="group" aria-label="Filtrar por grupo" id="filtro-grupo">
+      <button type="button" data-grupo="" aria-pressed="true">Todos</button>
+      <button type="button" data-grupo="antigos" aria-pressed="false">Antigos</button>
+      <button type="button" data-grupo="uso_continuo" aria-pressed="false">Uso contínuo</button>
+      <button type="button" data-grupo="transporte" aria-pressed="false">Transporte</button>
+    </div>
+    <div class="seg" role="group" aria-label="Modo de exibição">
+      <button type="button" class="ic" data-modo="cartoes" aria-pressed="true" aria-label="Ver em cartões"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
+      <button type="button" class="ic" data-modo="lista" aria-pressed="false" aria-label="Ver em lista"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg></button>
+    </div>
+  </div>
+
+  <div id="acervo">
+  {% for s in secoes %}
+  {% set cor = {'varrendo':'b-acc','incompleta':'b-err','novo':'b-acc','completar':'b-warn','a_varrer':'','concluido':'b-ok'}[s.id] %}
+  <section class="secao" aria-labelledby="sec-{{ s.id }}" data-secao>
+    <h2 id="sec-{{ s.id }}">{{ s.titulo }} <span class="cont {{ cor }}">{{ s.cartoes | length }}</span></h2>
+    <div class="grade">
+      {% for c in s.cartoes %}
+      {% set busca = [c.etiqueta, c.marca, c.linha, c.modelo, c.rotulo_tipo, c.rotulo or ''] | join(' ') | lower %}
+      <article class="cartao{{ ' ativo' if c.situacao == 'varrendo' }}" data-busca="{{ busca }}" data-grupo="{{ c.grupo_id }}">
+        <div class="c-topo">
+          <div class="palco">{{ icone_hd(c.tipo, 56, (c.rotulo_tipo or 'Disco')) }}</div>
+          <div class="c-info">
+            <div class="linha-etq">
+              {% if c.etiqueta %}<span class="etq">{{ c.etiqueta }}</span>{% else %}<span class="etq vazia">sem etiqueta</span>{% endif %}
+              {% if c.grupo %}<span class="grupo"><i class="g-{{ c.grupo_id }}"></i>{{ c.grupo }}</span>{% endif %}
+              {% if c.conectado_em %}<span class="letra" title="Ligado agora">{{ c.conectado_em }}</span>{% endif %}
+            </div>
+            {% if c.marca or c.linha %}
+            <div class="marca">{{ c.marca or 'Marca não informada' }}{% if c.linha %} · {{ c.linha }}{% endif %}</div>
+            {% elif not c.tem_ficha_fisica %}
+            <div class="marca pendente" title="A marca e o modelo são lidos do próprio HD na próxima vez que ele for ligado">Ligue o HD para ver marca e modelo</div>
+            {% else %}
+            <div class="marca">Marca não informada</div>
+            {% endif %}
+            <div class="meta">
+              {{ c.rotulo_tipo or 'Disco' }}{% if c.formato %} {{ c.formato }}{% endif %}{% if c.conexao %} · {{ c.conexao }}{% endif %}{% if c.capacidade %} · {{ c.capacidade }}{% endif %}{% if c.arquivos %} · {{ c.arquivos }} arquivos{% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div class="sit s-{{ c.situacao }}">
+          {{ icone_sit(c.situacao) }}
+          <div>
+            <b>{{ c.titulo }}{% if c.situacao == 'varrendo' and c.progresso is not none %} · {{ c.progresso }}%{% endif %}</b>
+            {% if c.detalhe %}<span>{{ c.detalhe }}</span>{% endif %}
+            {% if c.situacao == 'varrendo' and c.progresso is not none %}<div class="prog"><span style="width:{{ c.progresso }}%"></span></div>{% endif %}
+          </div>
+        </div>
+
+        {% if c.livre_pct is not none %}
+        <div class="espaco{{ ' cheio' if c.livre_pct < 10 }}">
+          <div class="trilho"><span style="width:{{ (100 - c.livre_pct) | round(1) }}%"></span></div>
+          <div class="leg"><span>{{ 'Pouco espaço livre' if c.livre_pct < 10 else 'Espaço livre' }}</span><span>{{ c.livre }}{% if c.total %} de {{ c.total }}{% endif %}</span></div>
+        </div>
+        {% endif %}
+
+        {% set et = c.etiqueta | urlencode %}
+        {% if c.situacao == 'varrendo' %}<a class="c-acao prim" href="/acompanhar">Acompanhar</a>
+        {% elif c.situacao == 'incompleta' %}<a class="c-acao prim" href="/varrer?etiqueta={{ et }}"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8V4z"/></svg>Continuar varredura</a>
+        {% elif c.situacao == 'completar' %}<a class="c-acao prim" href="/varrer?etiqueta={{ et }}&amp;completar=1">Completar dados</a>
+        {% elif c.situacao == 'a_varrer' %}<a class="c-acao sec" href="/varrer?etiqueta={{ et }}"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8V4z"/></svg>Varrer agora</a>
+        {% elif c.situacao == 'novo' %}<a class="c-acao prim" href="/varrer">Dar nome e varrer</a>
+        {% else %}<a class="c-acao sec" href="/passo/relatorio">Ver no relatório</a>{% endif %}
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+  <p class="muted" id="sem-resultado" hidden>Nenhum HD corresponde à busca.</p>
+  </div>
+  {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  var raiz = document.getElementById('acervo');
+  if(!raiz) return;
+  var busca = document.getElementById('busca');
+  var grupo = '';
+  function filtrar(){
+    var q = (busca.value || '').trim().toLowerCase();
+    var algum = false;
+    raiz.querySelectorAll('[data-secao]').forEach(function(sec){
+      var visiveis = 0;
+      sec.querySelectorAll('.cartao').forEach(function(c){
+        var ok = (!q || c.getAttribute('data-busca').indexOf(q) >= 0) &&
+                 (!grupo || c.getAttribute('data-grupo') === grupo);
+        c.hidden = !ok; if(ok) visiveis++;
+      });
+      sec.hidden = visiveis === 0; if(visiveis) algum = true;
+    });
+    document.getElementById('sem-resultado').hidden = algum;
+  }
+  busca.addEventListener('input', filtrar);
+  document.querySelectorAll('#filtro-grupo button').forEach(function(b){
+    b.addEventListener('click', function(){
+      grupo = b.getAttribute('data-grupo');
+      document.querySelectorAll('#filtro-grupo button').forEach(function(x){ x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      filtrar();
+    });
+  });
+  function modo(m){
+    raiz.classList.toggle('lista', m === 'lista');
+    document.querySelectorAll('[data-modo]').forEach(function(x){ x.setAttribute('aria-pressed', x.getAttribute('data-modo') === m ? 'true' : 'false'); });
+    try { localStorage.setItem('acervo-modo', m); } catch(e) {}
+  }
+  document.querySelectorAll('[data-modo]').forEach(function(b){
+    b.addEventListener('click', function(){ modo(b.getAttribute('data-modo')); });
+  });
+  try { var salvo = localStorage.getItem('acervo-modo'); if(salvo) modo(salvo); } catch(e) {}
+  // Enquanto houver varredura, o cartão dela se atualiza sozinho.
+  if(raiz.querySelector('.cartao.ativo')) setTimeout(function(){ location.reload(); }, 15000);
+})();
+</script>
+{% endblock %}

@@ -28,6 +28,7 @@ from starlette.requests import Request
 
 import db
 import hardware  # marca/modelo/série dos discos (ícone + reconhecimento)
+import acervo    # tela inicial: o estado de cada HD (cartões), sem banco
 import scan       # a varredura roda no MESMO processo (essencial para o .exe empacotado)
 import relatorio  # gera o relatório local (dashboard + planilhas) a partir dos manifestos
 import dedup      # planeja a deduplicação (fase 2) a partir dos manifestos
@@ -185,6 +186,7 @@ def _enriquecer(d):
         if uso.total:
             d["livre"] = _humano_tb(uso.free)
             d["livre_pct"] = round(100 * uso.free / uso.total, 1)
+            d["livre_bytes"], d["total_bytes"] = uso.free, uso.total
     except Exception:
         pass
     try:
@@ -273,21 +275,50 @@ def _rodar(disco, raiz, grupo, modo="varredura"):
         _lock.release()
 
 
+def _job_para_acervo():
+    """Operação em andamento, no formato do cartão do Acervo (ou None)."""
+    if not _rodando():
+        return None
+    pct = None
+    if JOB["estado"] == "identificando" and JOB.get("ident_total"):
+        pct = round(100 * JOB["ident_feitos"] / JOB["ident_total"])
+        fase = "Identificando formatos"
+    elif JOB["estado"] == "completando":
+        pct = round(100 * JOB["lidos"] / JOB["total"]) if JOB["total"] else None
+        fase = "Completando dados"
+    elif JOB["estado"] == "contando":
+        fase = "Contando arquivos"
+    else:
+        pct = round(100 * JOB["lidos"] / JOB["total"]) if JOB["total"] else None
+        fase = "Lendo e conferindo arquivos"
+    return {"disco": JOB["disco"], "pct": pct, "fase": fase}
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
-    resumo = []
-    if db.conectado():
-        try:
-            import psycopg2
-            with psycopg2.connect(db.DATABASE_URL) as c, c.cursor() as cur:
-                cur.execute("SELECT label, grupo, status, arquivos, bytes_totais FROM resumo_discos ORDER BY label")
-                resumo = cur.fetchall()
-        except Exception:
-            resumo = []
+    """Tela inicial: o Acervo — cartões com o estado de cada HD, montados dos
+    manifestos e fichas deste computador (funciona offline)."""
+    try:
+        conectados = discos_disponiveis()
+    except Exception:
+        conectados = []
+    try:
+        dados = acervo.montar(MANIFEST_DIR, job=_job_para_acervo(), conectados=conectados)
+    except Exception as e:
+        dados = {"secoes": [], "kpi": {}, "novos": 0, "erro": f"{type(e).__name__}: {e}"}
+    return templates.TemplateResponse(request, "acervo.html", _ctx(
+        ativo="acervo", rodando=_rodando(), job_disco=JOB["disco"], **dados))
+
+
+@app.get("/varrer", response_class=HTMLResponse)
+def tela_varrer(request: Request, etiqueta: str = "", completar: str = ""):
+    """Formulário de varredura. `etiqueta` chega dos botões do Acervo (Continuar /
+    Completar dados) para não precisar redigitar o nome do HD."""
     return templates.TemplateResponse(request, "index.html", _ctx(
-        ativo="varredura", resumo=resumo, discos=discos_disponiveis(),
+        ativo="varredura", discos=discos_disponiveis(),
         rodando=_rodando(), job_estado=JOB["estado"], job_disco=JOB["disco"],
-        ferramentas=ferramentas_status(),
+        ferramentas=ferramentas_status(), etiqueta=etiqueta.strip(),
+        completar=bool(completar),
     ))
 
 
@@ -356,11 +387,11 @@ def config_salvar(request: Request, connection_string: str = Form("")):
 def varrer(disco: str = Form(...), raiz: str = Form(...), subpasta: str = Form(""), grupo: str = Form("")):
     caminho = os.path.join(raiz, subpasta) if subpasta.strip() else raiz
     if not disco.strip():
-        return HTMLResponse("<p>Informe a etiqueta do disco. <a href='/'>voltar</a></p>", status_code=400)
+        return HTMLResponse("<p>Informe a etiqueta do disco. <a href='/varrer'>voltar</a></p>", status_code=400)
     if not os.path.isdir(caminho):
         return HTMLResponse(
             f"<p>Caminho nao encontrado ou inacessivel: <b>{caminho}</b>. "
-            f"Confira se o disco esta ligado/montado. <a href='/'>voltar</a></p>", status_code=400)
+            f"Confira se o disco esta ligado/montado. <a href='/varrer'>voltar</a></p>", status_code=400)
     # Uma varredura por vez: se ja ha uma rodando, nao inicia outra.
     if not _lock.acquire(blocking=False):
         return HTMLResponse(
@@ -380,15 +411,15 @@ def backfill(disco: str = Form(...), raiz: str = Form(...), subpasta: str = Form
     """Completa só os metadados de mídia que faltaram, sem re-hashear."""
     caminho = os.path.join(raiz, subpasta) if subpasta.strip() else raiz
     if not disco.strip():
-        return HTMLResponse("<p>Informe a etiqueta do disco. <a href='/'>voltar</a></p>", status_code=400)
+        return HTMLResponse("<p>Informe a etiqueta do disco. <a href='/varrer'>voltar</a></p>", status_code=400)
     if not os.path.isdir(caminho):
         return HTMLResponse(
             f"<p>Caminho não encontrado: <b>{html.escape(caminho)}</b>. Ligue o disco. "
-            f"<a href='/'>voltar</a></p>", status_code=400)
+            f"<a href='/varrer'>voltar</a></p>", status_code=400)
     if not (MANIFEST_DIR / f"manifesto_{disco.strip()}.jsonl").exists():
         return HTMLResponse(
             f"<p>Ainda não há manifesto para <b>{html.escape(disco.strip())}</b> — "
-            f"faça a varredura antes de completar metadados. <a href='/'>voltar</a></p>", status_code=400)
+            f"faça a varredura antes de completar metadados. <a href='/varrer'>voltar</a></p>", status_code=400)
     if not _lock.acquire(blocking=False):
         return HTMLResponse("<p>Já existe uma operação em andamento. "
                             "<a href='/acompanhar'>acompanhar</a></p>", status_code=409)

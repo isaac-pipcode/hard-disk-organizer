@@ -317,11 +317,36 @@ def info_para(caminho):
 
 CAMPOS_FICHA = ("modelo", "fabricante", "serial", "conexao", "midia", "tamanho",
                 "marca", "linha", "tipo", "rotulo_tipo", "formato", "rotulo",
-                "serial_volume", "sistema_arquivos", "firmware", "pnp")
+                "serial_volume", "sistema_arquivos", "firmware", "pnp", "livre", "total")
 
 
 def _arquivo_ficha(pasta, etiqueta):
     return Path(pasta) / f"disco_{etiqueta}.json"
+
+
+def ler_ficha(pasta, etiqueta):
+    arq = _arquivo_ficha(pasta, etiqueta)
+    if arq.exists():
+        try:
+            return json.loads(arq.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+def atualizar_ficha(pasta, etiqueta, **campos):
+    """Mescla `campos` na ficha do HD (cria se não existir). Independe de haver
+    metadados físicos: guarda também o grupo e o estado da última varredura."""
+    ficha = ler_ficha(pasta, etiqueta)
+    ficha.update({k: v for k, v in campos.items() if v not in (None, "")})
+    ficha["etiqueta"] = etiqueta
+    try:
+        Path(pasta).mkdir(parents=True, exist_ok=True)
+        _arquivo_ficha(pasta, etiqueta).write_text(
+            json.dumps(ficha, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        return None
+    return ficha
 
 
 def registrar(pasta, etiqueta, caminho):
@@ -330,24 +355,11 @@ def registrar(pasta, etiqueta, caminho):
     info = info_para(caminho)
     if not info:
         return None
-    arq = _arquivo_ficha(pasta, etiqueta)
-    ficha = {}
-    if arq.exists():
-        try:
-            ficha = json.loads(arq.read_text(encoding="utf-8"))
-        except Exception:
-            ficha = {}
-    ficha.update({k: info.get(k) for k in CAMPOS_FICHA if info.get(k) not in (None, "")})
-    ficha["etiqueta"] = etiqueta
-    vistos = ficha.get("visto_em") or []
+    vistos = (ler_ficha(pasta, etiqueta).get("visto_em") or [])
     vistos.append(time.strftime("%Y-%m-%dT%H:%M:%S"))
-    ficha["visto_em"] = vistos[-50:]
-    try:
-        Path(pasta).mkdir(parents=True, exist_ok=True)
-        arq.write_text(json.dumps(ficha, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
-        return None
-    return ficha
+    campos = {k: info.get(k) for k in CAMPOS_FICHA}
+    campos["visto_em"] = vistos[-50:]
+    return atualizar_ficha(pasta, etiqueta, **campos)
 
 
 def fichas(pasta):
