@@ -31,6 +31,7 @@ hiddenimports += [
     "acervo",                    # tela inicial: cartoes com o estado de cada HD
     "pacote",                    # pacote de envio (zip com inventarios + fichas + registros)
     "nomes",                     # nomes dos arquivos de cada HD (manifesto, ficha, registros)
+    "conteudo",                  # tela "Conteudo do HD" (le o inventario, nunca o disco)
     "versao", "_versao",         # versao do programa (o _versao.py e gerado no build)
     "importar",                  # importacao de manifestos de outras maquinas (panel)
     "dotenv",                    # carrega .env ao lado do .exe (DATABASE_URL do Supabase)

@@ -29,6 +29,8 @@
     .metrica { background:#fff; border:1px solid #eee; border-radius:8px; padding:.6rem .7rem; }
     .metrica .n { font-size:1.15rem; font-weight:700; }
     .metrica .r { font-size:.72rem; color:#777; text-transform:uppercase; letter-spacing:.03em; }
+    .ver-conteudo { display:inline-block; margin-top:.8rem; padding:.45rem .9rem; border-radius:8px; background:var(--azul); color:#fff;
+                    font-weight:600; font-size:.9rem; text-decoration:none; }
     .arquivo { font-size:.8rem; color:#666; margin-top:.8rem; word-break:break-all; min-height:1.1em; }
     .avisos { margin-top:1rem; font-size:.82rem; }
     .avisos summary { cursor:pointer; color:#8a5a00; font-weight:600; }
@@ -62,6 +64,7 @@
       <div class="metrica"><div class="n" id="m-vel">—</div><div class="r">Velocidade</div></div>
     </div>
     <div class="arquivo" id="arquivo"></div>
+    <a class="ver-conteudo" id="ver-conteudo" hidden>Ver o que já foi lido (pastas e arquivos) →</a>
     <div class="avisos" id="avisos-box" style="display:none">
       <details>
         <summary id="avisos-sum">Arquivos com falha de leitura</summary>
@@ -120,6 +123,8 @@ async function tick(){
 
   document.getElementById("alvo").textContent =
     (s.disco ? "Disco: " + s.disco : "") + (s.raiz ? "  ·  " + s.raiz : "");
+  const ver = document.getElementById("ver-conteudo");
+  if (s.disco) { ver.href = "/conteudo/" + encodeURIComponent(s.disco); ver.hidden = false; }
 
   const ret = document.getElementById("retomando");
   if(s.retomados && s.retomados > 0 && s.estado !== "concluido"){
