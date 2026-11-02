@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% from "_icones_hd.html" import icone_hd %}
+{% from "_icones_sit.html" import icone_sit %}
+{% block titulo %}{{ etiqueta }} · Conteúdo do HD — PRESERVA-SCAN{% endblock %}
+{% block head_extra %}
+<style>
+  .cab .palco{ width:72px; height:72px; border-radius:16px; background:var(--surface); border:1px solid var(--line);
+               display:flex; align-items:center; justify-content:center; flex:none; }
+  .cab h1{ display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; margin:0; }
+  .selo-inv{ display:inline-flex; align-items:center; gap:.35rem; font-size:.78rem; font-weight:650; color:var(--muted);
+             background:var(--surface2); border:1px solid var(--line); border-radius:999px; padding:.15rem .6rem; }
+  .ao-vivo{ display:flex; gap:.8rem; align-items:center; padding:.8rem 1rem; border-radius:12px; margin-bottom:1rem;
+            background:var(--accent-soft); color:var(--accent-ink); font-size:.92rem; }
+  .ao-vivo .ponto{ width:10px; height:10px; border-radius:50%; background:var(--accent); flex:none; animation:pulso 1.6s infinite; }
+  @keyframes pulso{ 0%,100%{ opacity:1 } 50%{ opacity:.25 } }
+  @media (prefers-reduced-motion:reduce){ .ao-vivo .ponto{ animation:none; } }
+  .ao-vivo .prog{ height:6px; border-radius:3px; background:rgba(0,0,0,.08); margin-top:.35rem; overflow:hidden; }
+  .ao-vivo .prog span{ display:block; height:100%; background:var(--accent); }
+  .barra-ferr select{ width:auto; flex:0 0 auto; min-height:44px; border-radius:10px; border:0; background:var(--surface2); color:var(--ink);
+                      font:inherit; font-size:.88rem; font-weight:650; padding:0 .7rem; }
+  .barra-ferr .seg a{ display:flex; align-items:center; min-height:40px; padding:0 .8rem; border-radius:9px; color:var(--muted);
+                      font-size:.88rem; font-weight:650; text-decoration:none; }
+  .barra-ferr .seg a[aria-current="true"]{ background:var(--surface); color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.14); }
+
+  .migalhas{ display:flex; flex-wrap:wrap; align-items:center; gap:.3rem; font-size:.92rem; margin:0 0 .6rem; }
+  .migalhas a{ text-decoration:none; font-weight:600; }
+  .migalhas .sep{ color:var(--muted); }
+  .resumo-pasta{ display:flex; flex-wrap:wrap; gap:.4rem .9rem; align-items:center; color:var(--muted); font-size:.88rem; margin-bottom:1rem; }
+  .resumo-pasta b{ color:var(--ink); }
+  .t{ display:inline-flex; align-items:center; gap:.3rem; }
+  .t i{ width:9px; height:9px; border-radius:3px; display:inline-block; }
+  .t-video{ background:#2b6ca3; } .t-audio{ background:#8b4fb8; } .t-imagem{ background:#2f8a57; }
+  .t-documento{ background:#b9821a; } .t-outro{ background:#9aa3b0; }
+
+  .pastas{ display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:.6rem; margin-bottom:1.2rem; }
+  .pasta{ display:flex; gap:.7rem; align-items:center; padding:.75rem .85rem; border:1px solid var(--line); border-radius:12px;
+          background:var(--surface); color:var(--ink); text-decoration:none; min-height:56px; }
+  .pasta:hover{ border-color:var(--accent); }
+  .pasta .ico{ width:26px; height:26px; color:var(--accent); }
+  .pasta .nm{ font-weight:650; word-break:break-word; line-height:1.3; }
+  .pasta .q{ color:var(--muted); font-size:.8rem; }
+  .mix{ display:flex; height:4px; border-radius:2px; overflow:hidden; margin-top:.35rem; background:var(--line); }
+  .mix span{ display:block; height:100%; }
+  .pasta.nova{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft); }
+
+  table.arqs{ width:100%; border-collapse:collapse; font-size:.86rem; }
+  table.arqs th{ text-align:left; font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
+                 padding:.6rem .8rem; border-bottom:1px solid var(--line); white-space:nowrap; }
+  table.arqs td{ padding:.55rem .8rem; border-bottom:1px solid var(--line); vertical-align:top; }
+  table.arqs tr:last-child td{ border-bottom:0; }
+  table.arqs .nome{ word-break:break-word; font-weight:600; }
+  table.arqs .onde{ display:block; color:var(--muted); font-size:.76rem; font-weight:400; }
+  table.arqs .num{ white-space:nowrap; text-align:right; }
+  table.arqs .mid{ color:var(--muted); white-space:nowrap; }
+  table.arqs tr.novo td{ background:var(--accent-soft); }
+  .ok-h{ color:var(--ok); font-weight:700; white-space:nowrap; }
+  .sem-h{ color:var(--warn); font-weight:700; white-space:nowrap; }
+  .paginas{ display:flex; gap:.5rem; align-items:center; justify-content:center; margin:1rem 0; font-size:.9rem; }
+  .vazio{ text-align:center; padding:2rem 1rem; color:var(--muted); }
+  @media (max-width:760px){ table.arqs .col-fmt, table.arqs .col-data{ display:none; } }
+  @media (max-width:520px){ table.arqs .col-mid{ display:none; } }
+</style>
+{% endblock %}
+{% block conteudo %}
+  <div class="cab">
+    <div class="palco">{{ icone_hd(ficha.tipo or 'desconhecido', 56, ficha.rotulo_tipo or 'Disco') }}</div>
+    <div>
+      <h1><span class="etq">{{ etiqueta }}</span> Conteúdo do HD</h1>
+      <p class="lede" style="margin:.3rem 0 0">
+        {% if ficha.marca %}{{ ficha.marca }}{% if ficha.linha %} · {{ ficha.linha }}{% endif %} · {% endif %}
+        <span class="selo-inv" title="Esta tela mostra o inventário gravado pela varredura. O HD não é acessado — pode estar desligado.">{{ icone_sit('conteudo') }}lido do inventário, sem acessar o HD</span>
+      </p>
+    </div>
+  </div>
+
+  <form class="barra-ferr" method="get" action="/conteudo/{{ etiqueta | urlencode }}" id="filtros" role="search">
+    <input type="hidden" name="pasta" value="{{ d.pasta if d else '' }}">
+    <input type="hidden" name="tipo" value="{{ d.tipo if d else '' }}">
+    <label class="busca"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input type="search" name="busca" value="{{ d.busca if d else '' }}" placeholder="Buscar por nome ou pasta{{ ' (dentro desta pasta)' if d and d.pasta }}" aria-label="Buscar arquivos"></label>
+    {% set base_q = {'pasta': d.pasta if d else '', 'busca': d.busca if d else '', 'ordem': d.ordem if d else 'nome'} %}
+    <nav class="seg" aria-label="Tipo de arquivo">
+      <a href="?{{ base_q | urlencode }}" aria-current="{{ 'true' if not (d and d.tipo) else 'false' }}">Todos</a>
+      {% for k, rot in tipos.items() %}<a href="?{{ dict(base_q, tipo=k) | urlencode }}" aria-current="{{ 'true' if d and d.tipo == k else 'false' }}">{{ rot }}</a>{% endfor %}
+    </nav>
+    <select name="ordem" aria-label="Ordenar">
+      {% set o = d.ordem if d else 'nome' %}
+      <option value="nome" {{ 'selected' if o == 'nome' }}>Nome (A–Z)</option>
+      <option value="tamanho" {{ 'selected' if o == 'tamanho' }}>Maiores primeiro</option>
+      <option value="data" {{ 'selected' if o == 'data' }}>Modificados por último</option>
+      <option value="recentes" {{ 'selected' if o == 'recentes' }}>Lidos por último</option>
+    </select>
+  </form>
+
+  {% include "_conteudo_corpo.html" %}
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  var form = document.getElementById('filtros');
+  form.querySelector('select[name=ordem]').addEventListener('change', function(){ form.submit(); });
+
+  // Durante a varredura deste HD: busca só o miolo da tela a cada poucos segundos.
+  // As linhas que chegaram desde que a tela foi aberta ficam destacadas.
+  var corpo = document.getElementById('corpo');
+  if(!corpo || !corpo.hasAttribute('data-varrendo')) return;
+  var desde = corpo.getAttribute('data-seq') || '0';
+  function url(){
+    var u = new URL(location.href);
+    u.searchParams.set('parcial', '1'); u.searchParams.set('desde', desde);
+    return u.toString();
+  }
+  function atualizar(){
+    if(document.hidden){ return setTimeout(atualizar, 4000); }
+    fetch(url(), {cache:'no-store'}).then(function(r){ return r.text(); }).then(function(html){
+      var tmp = document.createElement('div'); tmp.innerHTML = html.trim();
+      var novo = tmp.firstElementChild;
+      if(!novo) return;
+      corpo.replaceWith(novo); corpo = novo;
+      if(corpo.hasAttribute('data-varrendo')) setTimeout(atualizar, 4000);
+    }).catch(function(){ setTimeout(atualizar, 8000); });
+  }
+  setTimeout(atualizar, 4000);
+})();
+</script>
+{% endblock %}

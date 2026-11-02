@@ -32,6 +32,7 @@ import hardware  # marca/modelo/série dos discos (ícone + reconhecimento)
 import acervo    # tela inicial: o estado de cada HD (cartões), sem banco
 import pacote    # pacote de envio (.zip) para o gestor do acervo
 import nomes     # nomes dos arquivos de cada HD (manifesto, ficha, registros)
+import conteudo  # navegar no conteúdo de um HD pelo inventário (inclusive durante a varredura)
 from versao import VERSAO
 import scan       # a varredura roda no MESMO processo (essencial para o .exe empacotado)
 import relatorio  # gera o relatório local (dashboard + planilhas) a partir dos manifestos
@@ -317,6 +318,30 @@ def home(request: Request, ok: str = ""):
         dados = {"secoes": [], "kpi": {}, "novos": 0, "erro": f"{type(e).__name__}: {e}"}
     return templates.TemplateResponse(request, "acervo.html", _ctx(
         ativo="acervo", rodando=_rodando(), job_disco=JOB["disco"], ok=ok[:200], **dados))
+
+
+# ---------------------------------------------------------------- conteúdo do HD
+@app.get("/conteudo/{etiqueta}", response_class=HTMLResponse)
+def tela_conteudo(request: Request, etiqueta: str, pasta: str = "", busca: str = "",
+                  tipo: str = "", ordem: str = "nome", pagina: int = 1, parcial: int = 0,
+                  desde: int = 0):
+    """Pastas e arquivos do HD, lidos do inventário — nunca do disco. Durante a
+    varredura deste HD a tela se atualiza sozinha (parcial=1 devolve só o miolo)."""
+    if not importar._validar_etiqueta(etiqueta):
+        return PlainTextResponse("HD não encontrado.", status_code=404)
+    try:
+        dados = conteudo.listar(MANIFEST_DIR, etiqueta, pasta, busca, tipo, ordem, pagina)
+    except Exception as e:
+        dados, erro = None, f"Não foi possível ler o inventário ({type(e).__name__}: {e})"
+    else:
+        erro = None
+    job = _job_para_acervo()
+    varrendo = job if job and job["disco"] == etiqueta else None
+    ctx = _ctx(ativo="acervo", etiqueta=etiqueta, d=dados, erro=erro, varrendo=varrendo, desde=desde,
+               tipos=conteudo.TIPOS, ficha=hardware.ler_ficha(MANIFEST_DIR, etiqueta),
+               humano=acervo.humano)   # tamanhos como no Acervo (decimal: 4 TB = 4 TB)
+    nome = "_conteudo_corpo.html" if parcial else "conteudo.html"
+    return templates.TemplateResponse(request, nome, ctx, status_code=200 if dados or varrendo else 404)
 
 
 # ---------------------------------------------------------------- HD não reconhecido

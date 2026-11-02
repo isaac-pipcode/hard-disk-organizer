@@ -1,0 +1,98 @@
+{#- Miolo da tela "Conteúdo do HD" — também devolvido sozinho (parcial=1) para a
+    atualização ao vivo durante a varredura. -#}
+{%- from "_icones_sit.html" import icone_sit -%}
+<div id="corpo"{% if varrendo %} data-varrendo{% endif %} data-seq="{{ d.ultimo_seq if d else 0 }}">
+  {% if varrendo %}
+  <div class="ao-vivo" role="status">
+    <span class="ponto" aria-hidden="true"></span>
+    <div style="flex:1">
+      <b>Varredura em andamento</b> · {{ varrendo.fase }}{% if varrendo.pct is not none %} · {{ varrendo.pct }}%{% endif %}
+      — esta tela se atualiza sozinha{% if desde %}; o que chegou agora fica destacado{% endif %}.
+      {% if varrendo.pct is not none %}<div class="prog"><span style="width:{{ varrendo.pct }}%"></span></div>{% endif %}
+    </div>
+    <a href="/acompanhar" style="white-space:nowrap;font-weight:650">Acompanhar</a>
+  </div>
+  {% endif %}
+
+  {% if erro %}<div class="aviso a-err">{{ erro }}</div>{% endif %}
+
+  {% if not d %}
+  <div class="card vazio">
+    {% if varrendo %}
+      <b style="color:var(--ink)">A leitura dos arquivos ainda não começou.</b><br>
+      Agora: {{ varrendo.fase | lower }}. Os arquivos aparecem aqui assim que forem conferidos.
+    {% else %}
+      <b style="color:var(--ink)">Este HD ainda não tem inventário neste computador.</b><br>
+      O conteúdo aparece aqui depois da varredura (ou ao importar o pacote de quem varreu).
+      <div class="btn-row" style="justify-content:center"><a class="btn" href="/varrer?etiqueta={{ etiqueta | urlencode }}">Varrer este HD</a></div>
+    {% endif %}
+  </div>
+  {% else %}
+  {% set q = {'busca': d.busca, 'tipo': d.tipo, 'ordem': d.ordem} %}
+  <nav class="migalhas" aria-label="Pasta atual">
+    <a href="?{{ dict(q, pasta='') | urlencode }}">{{ icone_sit('conteudo') }} {{ etiqueta }}</a>
+    {% for m in d.migalhas %}<span class="sep">/</span>{% if loop.last %}<b>{{ m.nome }}</b>{% else %}<a href="?{{ dict(q, pasta=m.caminho) | urlencode }}">{{ m.nome }}</a>{% endif %}{% endfor %}
+  </nav>
+
+  <div class="resumo-pasta">
+    <span><b>{{ '{:,}'.format(d.totais.arquivos).replace(',', '.') }}</b> arquivo{{ 's' if d.totais.arquivos != 1 }}{% if d.pasta %} nesta pasta{% endif %} · <b>{{ humano(d.totais.bytes) or '0 B' }}</b></span>
+    {% for k, rot in tipos.items() %}{% if d.totais.tipos[k] %}<span class="t"><i class="t-{{ k }}"></i>{{ rot }} {{ '{:,}'.format(d.totais.tipos[k]).replace(',', '.') }}</span>{% endif %}{% endfor %}
+    {% if d.totais.sem_hash %}<span class="sem-h">{{ d.totais.sem_hash }} sem impressão digital</span>{% endif %}
+  </div>
+
+  {% if d.subpastas %}
+  <div class="pastas">
+    {% for s in d.subpastas %}
+    <a class="pasta{{ ' nova' if desde and s.seq > desde }}" href="?{{ dict(q, pasta=s.caminho, busca='', tipo='') | urlencode }}">
+      {{ icone_sit('conteudo') }}
+      <div style="flex:1;min-width:0">
+        <div class="nm">{{ s.nome }}</div>
+        <div class="q">{{ '{:,}'.format(s.arquivos).replace(',', '.') }} arquivo{{ 's' if s.arquivos != 1 }} · {{ humano(s.bytes) or '0 B' }}</div>
+        <div class="mix" aria-hidden="true">{% for k in tipos %}{% if s.tipos[k] %}<span class="t-{{ k }}" style="width:{{ (100 * s.tipos[k] / s.arquivos) | round(1) }}%"></span>{% endif %}{% endfor %}</div>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if d.busca or d.tipo %}
+  <h2 style="margin-top:0">{{ d.encontrados }} arquivo{{ 's' if d.encontrados != 1 }} encontrado{{ 's' if d.encontrados != 1 }}{% if d.pasta %} abaixo desta pasta{% endif %}</h2>
+  {% endif %}
+
+  {% if d.arquivos %}
+  <div class="card pad0" style="overflow-x:auto">
+    <table class="arqs">
+      <thead><tr>
+        <th>Arquivo</th><th class="num">Tamanho</th><th class="col-fmt">Formato</th><th class="col-mid">Mídia</th>
+        <th class="col-data">Modificado</th><th>Conferido</th>
+      </tr></thead>
+      <tbody>
+      {% for a in d.arquivos %}
+      <tr{% if desde and a.seq > desde %} class="novo"{% endif %}>
+        <td class="nome"><span class="t" title="{{ tipos[a.tipo] }}"><i class="t-{{ a.tipo }}"></i></span> {{ a.nome }}
+          {% if (d.busca or d.tipo) and a.pasta %}<span class="onde">{{ a.pasta }}</span>{% endif %}</td>
+        <td class="num">{{ humano(a.bytes) or '0 B' }}</td>
+        <td class="col-fmt" title="{{ a.puid }}">{{ a.formato or ('.' ~ a.ext if a.ext else '—') }}</td>
+        <td class="col-mid mid">{{ [a.duracao, a.resolucao, a.codec] | select | join(' · ') or '—' }}</td>
+        <td class="col-data">{{ a.mtime | data_curta or '—' }}</td>
+        <td>{% if a.sha256 %}<span class="ok-h" title="SHA-256: {{ a.sha256 }}">✓ sim</span>{% else %}<span class="sem-h">ainda não</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if d.paginas > 1 %}
+  <nav class="paginas" aria-label="Páginas">
+    {% if d.pagina > 1 %}<a href="?{{ dict(q, pasta=d.pasta, pagina=d.pagina - 1) | urlencode }}">← Anteriores</a>{% endif %}
+    <span>Página {{ d.pagina }} de {{ d.paginas }}</span>
+    {% if d.pagina < d.paginas %}<a href="?{{ dict(q, pasta=d.pasta, pagina=d.pagina + 1) | urlencode }}">Próximos →</a>{% endif %}
+  </nav>
+  {% endif %}
+  {% elif d.busca or d.tipo %}
+  <div class="card vazio">Nada encontrado{% if d.busca %} para “{{ d.busca }}”{% endif %}.
+    <a href="?{{ {'pasta': d.pasta, 'ordem': d.ordem} | urlencode }}">Limpar filtros</a></div>
+  {% elif not d.subpastas %}
+  <div class="card vazio">{% if varrendo %}Nada lido nesta pasta ainda.{% else %}Pasta vazia no inventário.{% endif %}</div>
+  {% endif %}
+  {% endif %}
+</div>

@@ -107,6 +107,19 @@
     .etq{ display:inline-flex; align-items:center; gap:.42rem; padding:.08rem .6rem .08rem .45rem; border:1.5px solid var(--ink);
           border-radius:7px; font-weight:800; font-size:.95rem; letter-spacing:.02em; background:var(--surface); }
     .etq::before{ content:""; width:.45rem; height:.45rem; border-radius:50%; border:1.5px solid var(--ink); }
+    /* barra de busca/filtros (Acervo, Conteúdo do HD) */
+    .barra-ferr{ display:flex; flex-wrap:wrap; gap:.55rem; align-items:center; background:var(--surface);
+                 border:1px solid var(--line); border-radius:14px; padding:.45rem; margin-bottom:1.4rem; }
+    .busca{ flex:1 1 240px; display:flex; align-items:center; gap:.55rem; min-height:44px; padding:0 .75rem;
+            border-radius:10px; background:var(--surface2); color:var(--muted); }
+    .busca input{ flex:1; min-width:0; border:0; background:transparent; padding:0; font-size:.95rem; }
+    .busca input:focus{ outline:none; }
+    .busca:focus-within{ outline:2px solid var(--accent); }
+    .seg{ display:flex; flex-wrap:wrap; gap:3px; padding:3px; border-radius:12px; background:var(--surface2); }
+    .seg button{ min-height:40px; padding:0 .8rem; border:0; border-radius:9px; background:transparent; color:var(--muted);
+                 font:inherit; font-size:.88rem; font-weight:650; cursor:pointer; }
+    .seg button[aria-pressed="true"]{ background:var(--surface); color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.14); }
+    .seg button.ic{ width:44px; padding:0; display:flex; align-items:center; justify-content:center; }
   </style>
   {% block head_extra %}{% endblock %}
 </head>
