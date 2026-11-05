@@ -404,8 +404,26 @@ def exiftool_lote(raiz: Path):
     return mapa
 
 
+_EPOCA = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+
+
 def iso(ts):
-    return datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc).isoformat()
+    """Data (mtime) em ISO-8601 UTC. NUNCA levanta exceção.
+
+    No Windows, `fromtimestamp` levanta `OSError: [Errno 22] Invalid argument` para
+    datas antes de 1970 ou muito no futuro — comuns em arquivos de câmera/cartão
+    com relógio desacertado (ex.: 01/01/1601, o "zero" do NTFS). Como essa conversão
+    roda para todo arquivo, UM arquivo assim abortava a varredura do disco inteiro,
+    sempre no mesmo ponto (HD EDICAO D e E). A conta pela época + timedelta não
+    depende da biblioteca C do sistema e vale para qualquer data representável;
+    fora disso (ano > 9999), registra None em vez de derrubar a varredura."""
+    try:
+        return datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc).isoformat()
+    except (OSError, OverflowError, ValueError):
+        try:
+            return (_EPOCA + datetime.timedelta(seconds=ts)).isoformat()
+        except (OverflowError, ValueError):
+            return None
 
 
 def humano(n):
@@ -548,6 +566,7 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
 
     _emit({"event": "phase", "fase": "varrendo"}, forcar=True)
     lote, novos, lidos, bytes_lidos, erros = [], 0, 0, 0, 0
+    atual = None   # arquivo em processamento: vai na mensagem se algo derrubar a varredura
     campos = ["disco_label", "caminho", "nome", "extensao", "tamanho_bytes",
               "mtime", "sha256", "puid", "formato"]
 
@@ -600,10 +619,12 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
                     # is_symlink/is_file/stat consultam o disco: num setor defeituoso
                     # levantam OSError (ex.: WinError 23 -> errno 22) que, sem este
                     # try, abortava a varredura INTEIRA — sempre no mesmo arquivo.
+                    atual = rel
                     try:
                         if caminho_abs.is_symlink() or not caminho_abs.is_file():
                             continue
                         st = caminho_abs.stat()
+                        mt = iso(st.st_mtime)
                     except OSError as e:
                         _falha(rel, e)
                         continue
@@ -612,7 +633,7 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
                     # IDEMPOTENCIA: se ja lido com mesmo tamanho e mtime, pula (a menos de --force)
                     if rel in ja:
                         tam_ant, mt_ant = ja[rel]
-                        if tam_ant == st.st_size and mt_ant == iso(st.st_mtime):
+                        if tam_ant == st.st_size and mt_ant == mt:
                             _progresso(arquivo=rel)  # mostra avanco mesmo pulando
                             continue
 
@@ -647,7 +668,7 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
                         "nome": nome,
                         "extensao": ext,
                         "tamanho_bytes": st.st_size,
-                        "mtime": iso(st.st_mtime),
+                        "mtime": mt,
                         "sha256": sha,
                         "puid": puid,
                         "formato": formato,
@@ -671,6 +692,10 @@ def varrer(disco_label, raiz: Path, grupo=None, force=False):
         # Falha global (banco caiu, disco desconectado no meio, etc.): marca a run
         # como falha no banco e avisa o painel de forma estruturada.
         msg = f"{type(e).__name__}: {e}"
+        if atual:
+            # Sem o caminho, um erro como "[Errno 22] Invalid argument" não diz qual
+            # arquivo derrubou a varredura — e o diagnóstico vira adivinhação.
+            msg += f" (no arquivo '{atual}')"
         _estado_varredura(disco_label, "falhou", erro=msg, lidos=lidos, novos=novos)
         try:
             db.fechar_run(run_id, novos, lidos, status="falhou")
